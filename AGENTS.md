@@ -22,7 +22,7 @@ et plus tard HRMS, IR…) est une **règle** indépendante.
 
 Trois façons de lancer :
 
-- interface graphique : `python app.py` (PySide6) ;
+- interface graphique : `python app.py` (HTML/CSS/JS dans une fenêtre pywebview) ;
 - ligne de commande : `python cli.py [--sans-commentaires] <entrée.docx> [sortie.docx]` ;
 - en bibliothèque : `core.processor.standardize_file(...)`.
 
@@ -31,7 +31,7 @@ Trois façons de lancer :
 ## 2. Architecture
 
 ```
-core/                   Cœur de traitement, SANS aucune dépendance à Qt
+core/                   Cœur de traitement, SANS aucune dépendance d'interface
   config.py             Dataclass RmnConfig + persistance JSON (rules_config.json)
   docx_io.py            Lecture/écriture .docx ; édition qui préserve les styles
   processor.py          Applique les règles à un document, produit le rapport
@@ -42,10 +42,10 @@ core/                   Cœur de traitement, SANS aucune dépendance à Qt
     nmr_section.py      Base NmrSectionRule (localisation, parenthèse, δ, signaux)
     nmr_1h.py           Règle 1H NMR (noyau + formatage d'un signal)
     nmr_13c.py          Règle 13C NMR (noyau + formatage d'un signal)
-ui/                     Interface, SEULE couche qui importe PySide6
-  controller.py         Logique applicative testable (sans Qt)
-  main_window.py        Fenêtre principale
-  settings_dialog.py    Dialogue des paramètres des règles RMN
+ui/                     Interface, SEULE couche qui importe pywebview
+  controller.py         Logique applicative testable (sans interface)
+  web_api.py            API exposée au JavaScript (window.pywebview.api)
+  web/                  index.html, app.css, app.js : affichage seulement
 app.py                  Point d'entrée GUI
 cli.py                  Point d'entrée CLI
 tests/                  Tests pytest
@@ -197,17 +197,24 @@ tests.
 
 Pour ajouter un paramètre : l'ajouter à la dataclass avec un défaut qui préserve
 le comportement actuel, l'intégrer à `config_to_dict` / `config_from_dict`
-(avec validation), puis l'exposer dans `ui/settings_dialog.py`.
+(avec validation), puis l'exposer dans le dialogue Paramètres de
+`ui/web/index.html` (`fillSettings` / `collectSettings` dans `app.js`).
 
 ---
 
 ## 6. Séparation des couches
 
-- `core/` ne doit **jamais** importer PySide6 ni quoi que ce soit de `ui/`.
+- `core/` ne doit **jamais** importer pywebview ni quoi que ce soit de `ui/`.
   Il doit rester testable sans interface graphique.
-- La logique applicative testable vit dans `ui/controller.py` (sans Qt) ;
-  `main_window.py` et `settings_dialog.py` sont les seuls à importer PySide6 et
-  ne contiennent que du câblage d'interface.
+- La logique applicative testable vit dans `ui/controller.py` (sans interface) ;
+  `ui/web_api.py` l'expose au JavaScript et n'importe pywebview qu'à
+  l'exécution (boîtes de dialogue injectables : testable sans fenêtre). Ses
+  attributs doivent rester PRIVÉS : pywebview expose au JavaScript tout
+  attribut public.
+- `ui/web/` ne fait qu'afficher et transmettre : aucune logique métier en
+  JavaScript, aucune ressource distante (l'application fonctionne hors ligne).
+  Aperçu dans un navigateur : servir `ui/web` en local et simuler
+  `window.pywebview.api`, puis déclencher l'événement `pywebviewready`.
 - Toute nouvelle logique métier va dans `core/`, pas dans l'UI.
 
 ---
@@ -258,12 +265,12 @@ réutilisable plutôt que de dupliquer.
 - Docstrings et commentaires **en français**, comme le reste du projet.
 - Suivre le style existant (dataclasses, type hints, regex nommées et
   commentées). Ne pas introduire de nouvelle dépendance sans raison ;
-  dépendances d'exécution : `python-docx`, `PySide6` ; de développement :
+  dépendances d'exécution : `python-docx`, `pywebview` ; de développement :
   `pytest`, `pyinstaller` (construction des exécutables via
-  `standardisation_rmn.spec` ; le CLI exécutable exclut Qt, et les modèles
+  `standardisation_rmn.spec` ; le CLI exécutable exclut l'interface, et les modèles
   `docx/templates` doivent rester embarqués pour les commentaires Word).
 - Préférer des fonctions pures et testables dans `core/` ; isoler les effets de
-  bord (I/O fichier, Qt).
+  bord (I/O fichier, interface).
 
 ---
 
@@ -276,6 +283,6 @@ réutilisable plutôt que de dupliquer.
   parsables, conserver le mot d'entrée, Unicode plutôt que superscript Word).
 - Après toute modification de code, exécuter `python -m pytest` et corriger les
   régressions avant de conclure.
-- Garder `core/` libre de Qt.
+- Garder `core/` libre de toute dépendance d'interface.
 - Mettre à jour `README.md` et ce fichier si un comportement visible ou une
   règle métier change.

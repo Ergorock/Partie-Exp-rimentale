@@ -1,1 +1,1 @@
-"""Interface graphique (PySide6) de l'outil de standardisation."""
+"""Interface graphique (web, via pywebview) de l'outil de standardisation."""

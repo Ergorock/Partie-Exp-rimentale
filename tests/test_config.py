@@ -1,6 +1,6 @@
 """Tests de la couche de configuration des règles RMN (FEAT-001).
 
-Entièrement indépendants de PySide6. Les défauts de ``RmnConfig`` doivent
+Entièrement indépendants de l'interface. Les défauts de ``RmnConfig`` doivent
 reproduire exactement le comportement actuel, et la persistance JSON doit être
 tolérante (fichier absent / corrompu / partiel -> défauts champ par champ).
 """

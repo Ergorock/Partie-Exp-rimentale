@@ -135,7 +135,8 @@ Pour développer (ajoute `pytest`) :
 python -m pip install -r requirements-dev.txt
 ```
 
-Dépendances : `python-docx` (lecture/écriture docx) et `PySide6` (interface) ;
+Dépendances : `python-docx` (lecture/écriture docx) et `pywebview` (fenêtre de
+l'interface, qui utilise le moteur WebView2 déjà présent sur Windows 10/11) ;
 `pytest` pour les tests uniquement.
 
 Le projet est aussi installable comme paquet (`pyproject.toml`), ce qui crée
@@ -154,14 +155,19 @@ python -m pip install .          # ou : python -m pip install -e ".[dev]"
 python app.py
 ```
 
-1. Cliquer sur **Charger…** et choisir le `.docx` à standardiser.
+1. Déposer le `.docx` sur la fenêtre, ou cliquer sur **Choisir un document…**.
 2. Le fichier de sortie est proposé automatiquement (suffixe `_standardise`),
-   modifiable via **Parcourir…**. Charger un autre fichier d'entrée remet la
+   modifiable via **Changer l'emplacement…**. Choisir un autre document remet la
    sortie proposée pour ce nouveau fichier, pour ne jamais écraser le résultat
    du précédent.
 3. Cliquer sur **Standardiser**.
-4. Lire le rapport des corrections dans la fenêtre ; le `.docx` corrigé est
-   écrit à l'emplacement de sortie.
+4. Le résultat s'affiche à droite : chaque ligne RMN telle qu'elle est écrite
+   dans le document, avec les signalements en marge. Le filtre **À vérifier**
+   (actif par défaut quand il y a des signalements) ne montre que ce qui demande
+   une intervention ; **Tous** montre aussi les lignes corrigées
+   automatiquement. **Ouvrir dans Word** ouvre le fichier produit.
+
+L'interface suit le thème clair ou sombre de Windows.
 
 Tout le document est traité : corps du texte, tableaux (imbriqués compris),
 en-têtes et pieds de page. Le rapport indique l'emplacement de chaque
@@ -179,8 +185,8 @@ Par défaut, chaque paragraphe qui porte un signalement « à vérifier » ou un
 marqueur inséré (`[??? K]`…) reçoit un **commentaire Word** dans le fichier de
 sortie (auteur « Standardisation RMN »), qui liste ces signalements. On les
 traite donc directement dans Word, au bon endroit ; les corrections sûres ne
-génèrent pas de commentaire. La case **Ajouter un commentaire Word sur chaque
-paragraphe à vérifier** de la fenêtre (cochée par défaut) ou l'option
+génèrent pas de commentaire. La case **Commenter dans Word les paragraphes à
+vérifier** de la fenêtre (cochée par défaut) ou l'option
 `--sans-commentaires` du CLI les désactivent.
 
 - Les commentaires déjà présents dans le document (relecteurs) sont conservés,
@@ -191,18 +197,18 @@ paragraphe à vérifier** de la fenêtre (cochée par défaut) ou l'option
 
 ### Paramètres
 
-La fenêtre principale expose un bouton **Paramètres** qui ouvre un dialogue
-modal pour ajuster le comportement des règles RMN sans encombrer l'interface
-principale. Paramètres éditables :
+Le bouton **Paramètres** ouvre un dialogue pour ajuster le comportement des
+règles RMN. Paramètres éditables :
 
-- **Multiplicités reconnues** : table des correspondances entrée → normalisée
-  (par exemple `bs` → `br s`). Les boutons **Ajouter** et **Retirer** gèrent les
-  lignes ; une ligne dont l'entrée est vide est ignorée, et une valeur
-  normalisée vide reprend l'entrée comme valeur. L'entrée est insensible à la
-  casse et aux espaces multiples (`Td` et `td` sont équivalents).
-- **Marqueur de donnée manquante** : texte inséré lorsqu'une température est
-  absente ou illisible (défaut `[??? K]`).
-- **Sens du tri des signaux** : décroissant (défaut), croissant ou aucun tri.
+- **Multiplicités reconnues** : table « écrit dans le document » → « devient »
+  (par exemple `bs` → `br s`). **Ajouter une multiplicité** et **Retirer**
+  gèrent les lignes ; une ligne dont l'entrée est vide est ignorée, et une
+  valeur « devient » vide reprend l'entrée. L'entrée est insensible à la casse
+  et aux espaces multiples (`Td` et `td` sont équivalents).
+- **Marqueur de température manquante** : texte inséré lorsqu'une température
+  est absente ou illisible (défaut `[??? K]`). Tant qu'il garde sa forme par
+  défaut, il suit l'unité choisie (`[??? °C]`).
+- **Ordre des signaux** : décroissant (défaut), croissant ou ordre du document.
 - **Label et parenthèse en gras** et **symbole δ en italique** : activent ou
   désactivent ces styles.
 - **Unité de température** : `K` ou `°C`. Elle est ajoutée aux températures
@@ -210,13 +216,13 @@ principale. Paramètres éditables :
   écrite dans l'autre unité (`298 K` alors que `°C` est configuré, ou `25 °C`
   avec `K`) n'est jamais réétiquetée : elle est laissée telle quelle et signalée.
 
-Les trois boutons :
+Les boutons :
 
-- **OK** écrit les paramètres dans `rules_config.json` et les applique
+- **Enregistrer** écrit les paramètres dans `rules_config.json` et les applique
   immédiatement ;
 - **Annuler** ferme le dialogue sans rien écrire ni modifier ;
-- **Réinitialiser** remet les champs aux valeurs par défaut dans le dialogue,
-  sans rien écrire tant qu'OK n'a pas été validé.
+- **Rétablir les valeurs par défaut** remet les champs aux valeurs par défaut
+  dans le dialogue, sans rien écrire tant qu'**Enregistrer** n'est pas cliqué.
 
 Les préférences sont enregistrées dans le dossier de l'utilisateur, jamais
 dans le dossier de l'application (qui peut être en lecture seule une fois
@@ -231,7 +237,7 @@ installée) :
 Le fichier est recréé aux valeurs par défaut s'il est absent ou corrompu. Un
 ancien `rules_config.json` resté à la racine du projet (versions précédentes)
 est encore lu tant que le nouveau fichier n'existe pas ; le premier
-enregistrement via **OK** écrit dans le nouvel emplacement.
+enregistrement via **Enregistrer** écrit dans le nouvel emplacement.
 
 ### Ligne de commande
 
@@ -254,14 +260,15 @@ exécutables avec PyInstaller (installé par `requirements-dev.txt`) :
 
 Le dossier `dist\` contient alors deux fichiers autonomes, à copier tels quels :
 
-- `StandardisationRMN.exe` (environ 55 Mo) : l'interface graphique ;
+- `StandardisationRMN.exe` (environ 18 Mo) : l'interface graphique ;
 - `StandardisationRMN-cli.exe` (environ 15 Mo) : la ligne de commande, mêmes
-  options que `cli.py`, sans Qt.
+  options que `cli.py`, sans interface.
 
 À savoir :
 
 - chaque exécutable est un fichier unique qui se décompresse au lancement :
   l'interface met quelques secondes à s'ouvrir ;
+- l'interface utilise WebView2, présent par défaut sur Windows 10 et 11 ;
 - l'exécutable n'est pas signé : au premier lancement, Windows SmartScreen
   peut afficher un avertissement (« Informations complémentaires » →
   « Exécuter quand même ») ;
@@ -291,8 +298,9 @@ core/
     nmr_1h.py       Règle 1H NMR (noyau + formatage d'un signal)
     nmr_13c.py      Règle 13C NMR (noyau + formatage d'un signal)
 ui/
-  controller.py     Logique applicative (sans Qt, testable)
-  main_window.py    Fenêtre PySide6
+  controller.py     Logique applicative (sans interface, testable)
+  web_api.py        API Python appelée par l'interface (pywebview)
+  web/              Interface : index.html, app.css, app.js (sans build)
 app.py              Point d'entrée de l'interface graphique
 cli.py              Interface en ligne de commande
 tests/              Tests pytest

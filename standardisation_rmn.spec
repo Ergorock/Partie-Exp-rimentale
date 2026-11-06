@@ -7,11 +7,13 @@ Usage (depuis la racine du projet, dans le venv qui contient PyInstaller) :
 
 Produit dans ``dist/`` deux exécutables autonomes (un seul fichier chacun) :
 
-- ``StandardisationRMN.exe``     : interface graphique, sans console ;
-- ``StandardisationRMN-cli.exe`` : ligne de commande, SANS Qt (plus léger).
+- ``StandardisationRMN.exe``     : interface graphique (HTML/CSS dans une
+  fenêtre native WebView2, via pywebview), sans console ;
+- ``StandardisationRMN-cli.exe`` : ligne de commande, sans interface.
 
-Les modèles internes de python-docx (``docx/templates``) sont embarqués : ils
-sont nécessaires pour créer les commentaires Word et les en-têtes.
+Embarqués : les fichiers de l'interface (``ui/web``) et les modèles internes de
+python-docx (``docx/templates``, nécessaires aux commentaires Word et aux
+en-têtes). Les moteurs d'interface inutilisés (Qt, GTK, CEF) sont exclus.
 """
 
 from PyInstaller.utils.hooks import collect_data_files
@@ -20,13 +22,14 @@ docx_data = collect_data_files("docx")
 
 # Modules jamais utilisés : exclus pour réduire la taille.
 COMMON_EXCLUDES = ["tkinter", "unittest", "pytest", "_pytest", "pydoc"]
+UNUSED_GUI_BACKENDS = ["PySide6", "shiboken6", "PyQt5", "PyQt6", "qtpy", "gi", "cefpython3"]
 
 # --- Interface graphique ---------------------------------------------------
 gui = Analysis(
     ["app.py"],
     pathex=["."],
-    datas=docx_data,
-    excludes=COMMON_EXCLUDES,
+    datas=docx_data + [("ui/web", "ui/web")],
+    excludes=COMMON_EXCLUDES + UNUSED_GUI_BACKENDS,
     noarchive=False,
 )
 gui_pyz = PYZ(gui.pure)
@@ -41,12 +44,12 @@ gui_exe = EXE(
     upx=False,
 )
 
-# --- Ligne de commande (sans Qt) --------------------------------------------
+# --- Ligne de commande (sans interface) --------------------------------------
 cli = Analysis(
     ["cli.py"],
     pathex=["."],
     datas=docx_data,
-    excludes=COMMON_EXCLUDES + ["PySide6", "shiboken6", "ui"],
+    excludes=COMMON_EXCLUDES + UNUSED_GUI_BACKENDS + ["webview", "clr", "pythonnet", "ui"],
     noarchive=False,
 )
 cli_pyz = PYZ(cli.pure)

@@ -1,7 +1,8 @@
-"""Logique applicative de l'UI, séparée de Qt pour rester testable.
+"""Logique applicative de l'UI, indépendante de toute bibliothèque graphique.
 
-Le contrôleur ne dépend pas de PySide6 : il orchestre le traitement et
-retourne des données simples que la fenêtre se contente d'afficher.
+Le contrôleur orchestre le traitement et retourne des données simples
+(dataclasses, dictionnaires JSON-compatibles) que l'interface se contente
+d'afficher. Il est entièrement testable sans fenêtre.
 """
 
 from __future__ import annotations
@@ -11,6 +12,59 @@ from dataclasses import dataclass
 from typing import List
 
 from core.processor import ProcessingReport, available_rules, same_file, standardize_file
+from core.rules.base import ActionKind
+
+# Libellés des types d'action pour l'interface (casse de phrase).
+_KIND_UI_LABELS = {
+    ActionKind.CORRECTED: "Corrigé",
+    ActionKind.FLAGGED: "À vérifier",
+    ActionKind.PLACEHOLDER: "Marqueur",
+    ActionKind.UNCHANGED: "Conforme",
+}
+
+
+def report_to_dict(report: ProcessingReport) -> dict:
+    """Convertit un rapport en dictionnaire JSON-compatible pour l'interface.
+
+    ``counts`` compte des PARAGRAPHES (pas des actions) : modifiés
+    (``corrected``), portant au moins un signalement (``flagged``) ou un
+    marqueur inséré (``placeholder``). ``needs_review`` marque les paragraphes
+    qui demandent une intervention humaine.
+    """
+    paragraphs = []
+    counts = {"corrected": 0, "flagged": 0, "placeholder": 0}
+    for pr in report.paragraphs:
+        kinds = {a.kind for a in pr.actions}
+        if pr.changed:
+            counts["corrected"] += 1
+        if ActionKind.FLAGGED in kinds:
+            counts["flagged"] += 1
+        if ActionKind.PLACEHOLDER in kinds:
+            counts["placeholder"] += 1
+        paragraphs.append(
+            {
+                "label": pr.label,
+                "before": pr.original_text,
+                "after": pr.new_text,
+                "changed": pr.changed,
+                "needs_review": bool(kinds & {ActionKind.FLAGGED, ActionKind.PLACEHOLDER}),
+                "actions": [
+                    {
+                        "kind": a.kind.value,
+                        "label": _KIND_UI_LABELS.get(a.kind, a.kind.value),
+                        "rule": a.rule_name,
+                        "message": a.message,
+                    }
+                    for a in pr.actions
+                ],
+            }
+        )
+    return {
+        "paragraphs": paragraphs,
+        "counts": counts,
+        "comments": report.comment_count,
+        "summary": report.summary(),
+    }
 
 
 @dataclass

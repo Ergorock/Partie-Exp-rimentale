@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Standardisation RMN</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Standardisation RMN</h1>
+    <button type="button" class="quiet" id="open-settings">Paramètres</button>
+  </header>
+
+  <main class="layout">
+    <aside class="controls" aria-label="Préparation">
+      <section class="field">
+        <h2>Document</h2>
+        <div class="dropzone" id="dropzone" data-state="empty">
+          <div class="drop-empty">
+            <p class="drop-title">Déposez un document Word ici</p>
+            <button type="button" id="choose-input">Choisir un document…</button>
+          </div>
+          <div class="drop-filled">
+            <p class="file-name" id="input-name"></p>
+            <p class="file-dir" id="input-dir"></p>
+            <button type="button" class="link" id="change-input">Changer de document</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="field">
+        <h2>Enregistrer sous</h2>
+        <p class="path" id="output-path">Choisissez d'abord un document.</p>
+        <button type="button" class="link" id="choose-output" disabled>Changer l'emplacement…</button>
+      </section>
+
+      <section class="field">
+        <h2>Règles</h2>
+        <div id="rules" class="rules"></div>
+        <label class="check">
+          <input type="checkbox" id="annotate" checked>
+          <span>Commenter dans Word les paragraphes à vérifier</span>
+        </label>
+      </section>
+
+      <button type="button" class="primary" id="run" disabled>Standardiser</button>
+      <p class="error" id="error" role="alert" hidden></p>
+    </aside>
+
+    <section class="results" aria-live="polite">
+      <div class="empty" id="empty">
+        <p>Les lignes RMN corrigées s'afficheront ici, avec ce qui reste à vérifier.</p>
+      </div>
+
+      <div id="report" hidden>
+        <div class="report-head">
+          <div>
+            <p class="headline" id="headline"></p>
+            <p class="subline" id="subline"></p>
+          </div>
+          <button type="button" id="open-output">Ouvrir dans Word</button>
+        </div>
+        <div class="filter" role="group" aria-label="Filtrer les paragraphes">
+          <button type="button" data-filter="review" aria-pressed="true" id="filter-review"></button>
+          <button type="button" data-filter="all" aria-pressed="false" id="filter-all"></button>
+        </div>
+        <ol class="entries" id="entries"></ol>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="settings" aria-labelledby="settings-title">
+    <form method="dialog" id="settings-form">
+      <h2 id="settings-title">Paramètres des règles RMN</h2>
+
+      <fieldset>
+        <legend>Multiplicités reconnues</legend>
+        <p class="hint">À gauche ce qui est écrit dans le document, à droite ce qui sera écrit à la place. Une multiplicité absente de cette liste (td, dt…) est signalée sans être modifiée.</p>
+        <div class="mult-scroll">
+          <table class="mult">
+            <thead><tr><th scope="col">Écrit</th><th scope="col">Devient</th><th><span class="sr">Retirer</span></th></tr></thead>
+            <tbody id="mult-rows"></tbody>
+          </table>
+        </div>
+        <button type="button" class="link" id="add-mult">Ajouter une multiplicité</button>
+      </fieldset>
+
+      <fieldset class="grid">
+        <legend>Mise en forme</legend>
+        <label for="sort-order">Ordre des signaux</label>
+        <select id="sort-order">
+          <option value="desc">Du plus grand déplacement au plus petit</option>
+          <option value="asc">Du plus petit déplacement au plus grand</option>
+          <option value="none">Ordre du document</option>
+        </select>
+
+        <label for="temperature-unit">Unité de température</label>
+        <select id="temperature-unit">
+          <option value="K">K</option>
+          <option value="°C">°C</option>
+        </select>
+
+        <label for="placeholder">Marqueur de température manquante</label>
+        <input type="text" id="placeholder" spellcheck="false">
+
+        <span></span>
+        <label class="check"><input type="checkbox" id="bold-label"><span>Label et parenthèse en gras</span></label>
+        <span></span>
+        <label class="check"><input type="checkbox" id="italic-delta"><span>δ en italique</span></label>
+      </fieldset>
+
+      <div class="dialog-actions">
+        <button type="button" class="link" id="reset-settings">Rétablir les valeurs par défaut</button>
+        <span class="spacer"></span>
+        <button type="button" id="cancel-settings">Annuler</button>
+        <button type="button" class="primary" id="save-settings">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>

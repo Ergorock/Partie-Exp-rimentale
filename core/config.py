@@ -1,4 +1,4 @@
-"""Couche de configuration des règles RMN, indépendante de Qt.
+"""Couche de configuration des règles RMN, indépendante de l'interface.
 
 Ce module centralise les paramètres éditables des règles RMN (multiplicités
 reconnues, marqueur de température, ordre de tri, gras/italique, unité de
@@ -6,7 +6,7 @@ température) dans une dataclass ``RmnConfig`` dont les DÉFAUTS reproduisent
 EXACTEMENT le comportement actuel de ``core/rules/nmr_common.py`` et des règles
 ``nmr_1h`` / ``nmr_13c``.
 
-Le module n'importe aucun composant PySide6 : il est entièrement testable sans
+Le module n'importe aucune bibliothèque graphique : il est entièrement testable sans
 interface graphique. Il expose :
 
 - la dataclass ``RmnConfig`` et sa valeur par défaut ;

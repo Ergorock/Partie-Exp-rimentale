@@ -3,7 +3,7 @@
 Pour chaque paramètre de ``RmnConfig``, on pose une configuration non-défaut via
 ``set_config`` puis on applique une règle et on vérifie l'effet observable. Le
 singleton est systématiquement réinitialisé en teardown pour ne pas polluer les
-autres tests. Indépendant de PySide6.
+autres tests. Indépendant de l'interface.
 """
 
 import pytest
