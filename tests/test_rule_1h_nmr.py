@@ -128,3 +128,15 @@ def test_only_1h_segment_reformatted_in_multisection_paragraph():
     # replaced_text ne couvre que le segment 1H.
     assert result.replaced_text.strip().startswith("1H NMR")
     assert "13C" not in result.replaced_text
+
+
+def test_separator_space_preserved_before_next_section():
+    # Régression cosmétique : un espace doit séparer la fin du segment 1H
+    # reformaté du label de la section suivante (pas de '2H)13C').
+    text = (
+        "1H NMR (400 MHz, CDCl3, 298 K) δ 9.18 (dd, J = 4.7 Hz, 2H) "
+        "13C NMR (100 MHz, CDCl3, 298 K) δ 149.4 (2C)"
+    )
+    result = RULE.apply(text)
+    assert "2H) 13C NMR" in result.new_text
+    assert "2H)13C" not in result.new_text

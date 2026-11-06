@@ -139,6 +139,32 @@ def section_span(text: str, start: int = 0) -> Tuple[int, int]:
     return start, end
 
 
+def section_separator(segment: str, suffix: str) -> str:
+    """Retourne l'espace à réinsérer entre un segment reformaté et la suite.
+
+    Quand un paragraphe contient plusieurs sections RMN collées, le segment
+    reformaté est reconstruit à partir de ses éléments et perd l'espace qui le
+    séparait de la section suivante dans le texte d'origine. Pour éviter un
+    collage disgracieux (``2H)13C NMR``), on réinsère un espace unique dès lors
+    que le segment d'origine se terminait par un espace et que le suffixe
+    commence par un caractère non-espace.
+
+    Args:
+        segment: le segment de section d'origine (avant reformatage).
+        suffix: le reste du paragraphe qui suit le segment.
+
+    Returns:
+        ``" "`` si un espace séparateur doit être réinséré, ``""`` sinon.
+    """
+    if not suffix:
+        return ""
+    segment_had_trailing_space = segment != segment.rstrip()
+    suffix_starts_without_space = suffix[:1] not in (" ", "\t", "\n")
+    if segment_had_trailing_space and suffix_starts_without_space:
+        return " "
+    return ""
+
+
 # --------------------------------------------------------------------------- #
 # Parenthèse à trois éléments (fréquence, solvant, température)
 # --------------------------------------------------------------------------- #

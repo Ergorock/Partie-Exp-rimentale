@@ -155,6 +155,12 @@ class ThirteenCNmrRule(Rule):
             segments.append(StyledSegment(f" {signals_text}"))
             segment_plain += f" {signals_text}"
 
+        # Réinsère l'espace séparateur perdu avant une section suivante collée.
+        separator = nmr_common.section_separator(original_segment, suffix)
+        if separator:
+            segments.append(StyledSegment(separator))
+            segment_plain += separator
+
         new_text = f"{prefix}{segment_plain}{suffix}"
 
         if new_text == paragraph_text:

@@ -1,0 +1,19 @@
+# Caches Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environnements virtuels
+.venv/
+venv/
+env/
+
+# Caches d'outils
+.pytest_cache/
+
+# Artefacts de workflow
+.agents/
+
+# Fichiers de sortie temporaires
+_tmp_*.docx
+*_standardise.docx
