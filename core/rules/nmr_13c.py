@@ -65,6 +65,9 @@ class ThirteenCNmrRule(Rule):
         return bool(_PREFIX_RE.match(paragraph_text))
 
     def apply(self, paragraph_text: str) -> RuleResult:
+        from core.config import get_config
+
+        config = get_config()
         text = nmr_common.normalize_spaces(paragraph_text)
 
         # 1) Délimiter le segment 13C (du label au prochain label de section).
@@ -110,7 +113,7 @@ class ThirteenCNmrRule(Rule):
             )
 
         # 3) Normaliser la parenthèse à trois éléments.
-        paren = nmr_common.normalize_parenthesis(inside)
+        paren = nmr_common.normalize_parenthesis(inside, config)
         for kind, message in paren.actions:
             actions.append(Action(_KIND_MAP[kind], message, self.name))
 
@@ -122,7 +125,7 @@ class ThirteenCNmrRule(Rule):
         body = nmr_common.split_delta_body(rest)
         signals_text = ""
         if body is not None:
-            signals, all_parsable = nmr_common.parse_signals(body)
+            signals, all_parsable = nmr_common.parse_signals(body, config)
             if not all_parsable:
                 actions.append(
                     Action(
@@ -132,7 +135,7 @@ class ThirteenCNmrRule(Rule):
                         self.name,
                     )
                 )
-            ordered = nmr_common.sort_signals(signals, all_parsable)
+            ordered = nmr_common.sort_signals(signals, all_parsable, config)
             signals_text = ", ".join(nmr_common.format_signal_13c(s) for s in ordered)
         else:
             actions.append(
@@ -146,9 +149,9 @@ class ThirteenCNmrRule(Rule):
 
         # 6) Reconstruire le segment reformaté et le paragraphe complet.
         segments = [
-            StyledSegment(label_paren, bold=True),
+            StyledSegment(label_paren, bold=config.bold_label),
             StyledSegment(" "),
-            StyledSegment(nmr_common.DELTA, italic=True),
+            StyledSegment(nmr_common.DELTA, italic=config.italic_delta),
         ]
         segment_plain = f"{label_paren} {nmr_common.DELTA}"
         if signals_text:

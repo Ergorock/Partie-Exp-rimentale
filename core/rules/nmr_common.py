@@ -30,6 +30,8 @@ import re
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
+from core.config import RmnConfig, get_config
+
 # Marqueur inséré lorsqu'une température est attendue mais introuvable.
 TEMPERATURE_PLACEHOLDER = "[??? K]"
 
@@ -189,18 +191,27 @@ def _normalize_frequency(freq: str) -> Tuple[str, bool]:
     return freq, freq != original.strip()
 
 
-def _normalize_temperature(temp: str) -> Tuple[str, bool]:
-    """Normalise l'élément température vers ``<nombre> K``."""
+def _normalize_temperature(
+    temp: str, config: Optional[RmnConfig] = None
+) -> Tuple[str, bool]:
+    """Normalise l'élément température vers ``<nombre> <unité>``.
+
+    L'unité est lue dans la configuration (``config.temperature_unit``) sans
+    convertir la valeur numérique.
+    """
+    config = config or get_config()
     original = temp
     temp = temp.strip()
     number = re.search(r"\d+(?:\.\d+)?", temp)
     if not number:
         return temp, False
-    normalized = f"{number.group()} K"
+    normalized = f"{number.group()} {config.temperature_unit}"
     return normalized, normalized != original.strip()
 
 
-def normalize_parenthesis(inside: str) -> ParenResult:
+def normalize_parenthesis(
+    inside: str, config: Optional[RmnConfig] = None
+) -> ParenResult:
     """Normalise le contenu d'une parenthèse de section RMN à trois éléments.
 
     Attend ``fréquence, solvant, température`` séparés par deux virgules :
@@ -218,6 +229,7 @@ def normalize_parenthesis(inside: str) -> ParenResult:
     Returns:
         Un ``ParenResult`` : texte normalisé + actions (kind, message).
     """
+    config = config or get_config()
     actions: List[Tuple[str, str]] = []
     elements = [e.strip() for e in inside.split(",")]
 
@@ -242,10 +254,10 @@ def normalize_parenthesis(inside: str) -> ParenResult:
     # Température (3e élément).
     if len(elements) >= 3:
         if not re.search(r"\d+(?:\.\d+)?", elements[2]):
-            elements[2] = TEMPERATURE_PLACEHOLDER
+            elements[2] = config.temperature_placeholder
             actions.append(("placeholder", "Température illisible : marqueur inséré."))
         else:
-            new_temp, changed = _normalize_temperature(elements[2])
+            new_temp, changed = _normalize_temperature(elements[2], config)
             if changed:
                 actions.append(
                     ("corrected", f"Température normalisée : '{elements[2]}' -> '{new_temp}'.")
@@ -256,7 +268,7 @@ def normalize_parenthesis(inside: str) -> ParenResult:
                 ("flagged", f"La parenthèse contient {len(elements)} éléments au lieu de 3.")
             )
     elif len(elements) == 2:
-        elements.append(TEMPERATURE_PLACEHOLDER)
+        elements.append(config.temperature_placeholder)
         actions.append(
             ("placeholder", "Température absente : marqueur '[??? K]' inséré.")
         )
@@ -365,13 +377,18 @@ _J_RE = re.compile(r"J\s*=\s*(-?\d+(?:\.\d+)?)\s*Hz", re.IGNORECASE)
 _INTEG_RE = re.compile(r"\b(\d+\s*[A-Za-z])\b")
 
 
-def _parse_multiplicity(token: str) -> Optional[str]:
+def _parse_multiplicity(
+    token: str, config: Optional[RmnConfig] = None
+) -> Optional[str]:
     """Reconnaît une multiplicité autorisée dans un token, ou None."""
+    config = config or get_config()
     token = token.strip().lower()
-    return _MULTIPLICITIES.get(token)
+    return config.multiplicities.get(token)
 
 
-def parse_signals(body: str) -> Tuple[List[Signal], bool]:
+def parse_signals(
+    body: str, config: Optional[RmnConfig] = None
+) -> Tuple[List[Signal], bool]:
     """Parse la liste des signaux d'une section RMN.
 
     Args:
@@ -381,6 +398,7 @@ def parse_signals(body: str) -> Tuple[List[Signal], bool]:
         ``(signaux, all_parsable)`` où ``all_parsable`` est ``False`` dès qu'un
         signal n'a pas pu être parsé proprement (déplacement illisible).
     """
+    config = config or get_config()
     raw_signals = _split_top_level(body)
     signals: List[Signal] = []
     all_parsable = bool(raw_signals)
@@ -413,7 +431,7 @@ def parse_signals(body: str) -> Tuple[List[Signal], bool]:
             fields = [f.strip() for f in inner.split(",")]
             remaining_fields: List[str] = []
             for field in fields:
-                mult = _parse_multiplicity(field)
+                mult = _parse_multiplicity(field, config)
                 jm = _J_RE.search(field)
                 if mult and multiplicity is None:
                     multiplicity = mult
@@ -440,16 +458,26 @@ def parse_signals(body: str) -> Tuple[List[Signal], bool]:
     return signals, all_parsable
 
 
-def sort_signals(signals: List[Signal], all_parsable: bool) -> List[Signal]:
-    """Trie les signaux du déplacement le plus grand au plus petit.
+def sort_signals(
+    signals: List[Signal],
+    all_parsable: bool,
+    config: Optional[RmnConfig] = None,
+) -> List[Signal]:
+    """Trie les signaux selon l'ordre configuré (``config.sort_order``).
 
-    Le tri n'a lieu que si ``all_parsable`` est vrai (règle de sûreté : on ne
-    réordonne jamais une liste dont un signal n'a pas pu être compris). Pour une
-    plage, la borne haute sert de clé.
+    - ``desc`` : du déplacement le plus grand au plus petit ;
+    - ``asc`` : du plus petit au plus grand ;
+    - ``none`` : aucun tri (ordre d'entrée conservé).
+
+    Règle de sûreté inchangée : si ``all_parsable`` est faux, on ne réordonne
+    jamais (quel que soit ``sort_order``). Pour une plage, la borne haute sert
+    de clé.
     """
-    if not all_parsable:
+    config = config or get_config()
+    if not all_parsable or config.sort_order == "none":
         return signals
-    return sorted(signals, key=lambda s: s.shift_high, reverse=True)
+    reverse = config.sort_order == "desc"
+    return sorted(signals, key=lambda s: s.shift_high, reverse=reverse)
 
 
 def format_signal_1h(signal: Signal) -> str:
