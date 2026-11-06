@@ -20,3 +20,8 @@ _tmp_*.docx
 
 # Préférences locales (écrites par l'UI)
 rules_config.json
+
+# Artefacts de construction
+build/
+dist/
+*.egg-info/

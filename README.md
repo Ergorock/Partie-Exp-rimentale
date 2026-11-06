@@ -123,12 +123,28 @@ couplage est présent (ex. `162.3 (d, J = 245 Hz)` pour un couplage C–F).
 
 Python 3.10+ requis.
 
+Pour utiliser l'outil :
+
 ```powershell
 python -m pip install -r requirements.txt
 ```
 
-Dépendances : `python-docx` (lecture/écriture docx), `PySide6` (interface),
-`pytest` (tests).
+Pour développer (ajoute `pytest`) :
+
+```powershell
+python -m pip install -r requirements-dev.txt
+```
+
+Dépendances : `python-docx` (lecture/écriture docx) et `PySide6` (interface) ;
+`pytest` pour les tests uniquement.
+
+Le projet est aussi installable comme paquet (`pyproject.toml`), ce qui crée
+deux commandes : `standardisation-rmn` (ligne de commande) et
+`standardisation-rmn-gui` (interface graphique).
+
+```powershell
+python -m pip install .          # ou : python -m pip install -e ".[dev]"
+```
 
 ## Utilisation
 
@@ -202,9 +218,20 @@ Les trois boutons :
 - **Réinitialiser** remet les champs aux valeurs par défaut dans le dialogue,
   sans rien écrire tant qu'OK n'a pas été validé.
 
-Les préférences sont enregistrées dans `rules_config.json` à la racine du
-projet. Ce fichier **n'est pas versionné** (il figure dans `.gitignore`) et il
-est automatiquement recréé aux valeurs par défaut s'il est absent ou corrompu.
+Les préférences sont enregistrées dans le dossier de l'utilisateur, jamais
+dans le dossier de l'application (qui peut être en lecture seule une fois
+installée) :
+
+- Windows : `%APPDATA%\StandardisationRMN\rules_config.json` ;
+- macOS / Linux : `~/.config/standardisation-rmn/rules_config.json` (ou
+  `$XDG_CONFIG_HOME`) ;
+- la variable d'environnement `STANDARDISATION_RMN_CONFIG` impose un autre
+  chemin (installation portable).
+
+Le fichier est recréé aux valeurs par défaut s'il est absent ou corrompu. Un
+ancien `rules_config.json` resté à la racine du projet (versions précédentes)
+est encore lu tant que le nouveau fichier n'existe pas ; le premier
+enregistrement via **OK** écrit dans le nouvel emplacement.
 
 ### Ligne de commande
 
@@ -215,6 +242,32 @@ python cli.py "partie exp.docx" "resultat.docx"
 # sans commentaires Word :
 python cli.py --sans-commentaires "partie exp.docx"
 ```
+
+## Exécutable Windows
+
+Pour distribuer l'outil à des utilisateurs sans Python, construire les
+exécutables avec PyInstaller (installé par `requirements-dev.txt`) :
+
+```powershell
+.venv\Scripts\python -m PyInstaller standardisation_rmn.spec --noconfirm
+```
+
+Le dossier `dist\` contient alors deux fichiers autonomes, à copier tels quels :
+
+- `StandardisationRMN.exe` (environ 55 Mo) : l'interface graphique ;
+- `StandardisationRMN-cli.exe` (environ 15 Mo) : la ligne de commande, mêmes
+  options que `cli.py`, sans Qt.
+
+À savoir :
+
+- chaque exécutable est un fichier unique qui se décompresse au lancement :
+  l'interface met quelques secondes à s'ouvrir ;
+- l'exécutable n'est pas signé : au premier lancement, Windows SmartScreen
+  peut afficher un avertissement (« Informations complémentaires » →
+  « Exécuter quand même ») ;
+- les préférences sont enregistrées dans `%APPDATA%\StandardisationRMN`,
+  comme pour la version Python ;
+- `build\` et `dist\` sont ignorés par git.
 
 ## Tests
 

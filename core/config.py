@@ -20,9 +20,11 @@ interface graphique. Il expose :
 from __future__ import annotations
 
 import json
+import os
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Mapping, Optional
 
 
 # Valeurs autorisées pour certains champs.
@@ -63,8 +65,48 @@ class RmnConfig:
     temperature_unit: str = "K"  # 'K' | '°C'
 
 
-# Chemin absolu du fichier de préférences, à la racine du projet.
-DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent.parent / "rules_config.json"
+CONFIG_FILENAME = "rules_config.json"
+
+#: Variable d'environnement qui impose le chemin du fichier de préférences
+#: (installation portable, tests…).
+CONFIG_ENV_VAR = "STANDARDISATION_RMN_CONFIG"
+
+
+def user_config_path(
+    environ: Optional[Mapping[str, str]] = None, platform: Optional[str] = None
+) -> Path:
+    """Chemin du fichier de préférences dans le dossier de l'utilisateur.
+
+    - ``STANDARDISATION_RMN_CONFIG`` s'il est défini ;
+    - Windows : ``%APPDATA%\\StandardisationRMN\\rules_config.json`` ;
+    - autres systèmes : ``$XDG_CONFIG_HOME`` (ou ``~/.config``)
+      ``/standardisation-rmn/rules_config.json``.
+
+    Le dossier d'installation de l'application peut être en lecture seule :
+    les préférences n'y sont donc jamais écrites. Fonction pure (``environ``
+    et ``platform`` injectables) pour être testable sur tout système.
+    """
+    environ = os.environ if environ is None else environ
+    platform = sys.platform if platform is None else platform
+    override = environ.get(CONFIG_ENV_VAR)
+    if override:
+        return Path(override)
+    if platform.startswith("win"):
+        base = environ.get("APPDATA") or str(Path.home() / "AppData" / "Roaming")
+        return Path(base) / "StandardisationRMN" / CONFIG_FILENAME
+    base = environ.get("XDG_CONFIG_HOME") or str(
+        Path(environ.get("HOME") or Path.home()) / ".config"
+    )
+    return Path(base) / "standardisation-rmn" / CONFIG_FILENAME
+
+
+#: Fichier de préférences actif (dossier utilisateur).
+DEFAULT_CONFIG_PATH = user_config_path()
+
+#: Ancien emplacement, à la racine du projet : encore LU (jamais écrit) tant
+#: que le fichier du dossier utilisateur n'existe pas, pour ne pas perdre les
+#: préférences enregistrées par une version précédente.
+LEGACY_CONFIG_PATH = Path(__file__).resolve().parent.parent / CONFIG_FILENAME
 
 
 def config_to_dict(config: RmnConfig) -> dict:
@@ -155,12 +197,17 @@ def load_config(path: Optional[Path] = None) -> RmnConfig:
 
     Sans ``path``, lit ``DEFAULT_CONFIG_PATH`` tel qu'il vaut AU MOMENT DE
     L'APPEL (et non à la définition de la fonction) : les tests peuvent ainsi
-    le rediriger vers un fichier temporaire.
+    le rediriger vers un fichier temporaire. Si ce fichier n'existe pas encore,
+    l'ancien emplacement (``LEGACY_CONFIG_PATH``, racine du projet) est lu à sa
+    place.
 
     Renvoie ``RmnConfig()`` par défaut, SANS lever d'exception, si le fichier est
     absent, corrompu (JSON invalide) ou ne contient pas un objet JSON.
     """
-    path = path if path is not None else DEFAULT_CONFIG_PATH
+    if path is None:
+        path = DEFAULT_CONFIG_PATH
+        if not Path(path).exists() and Path(LEGACY_CONFIG_PATH).exists():
+            path = LEGACY_CONFIG_PATH
     try:
         with open(path, "r", encoding="utf-8") as handle:
             data = json.load(handle)
@@ -174,9 +221,11 @@ def load_config(path: Optional[Path] = None) -> RmnConfig:
 def save_config(config: RmnConfig, path: Optional[Path] = None) -> None:
     """Écrit la configuration dans ``path`` (JSON UTF-8, indenté).
 
-    Sans ``path``, écrit dans ``DEFAULT_CONFIG_PATH`` résolu à l'appel.
+    Sans ``path``, écrit dans ``DEFAULT_CONFIG_PATH`` résolu à l'appel (jamais
+    dans l'ancien emplacement). Le dossier parent est créé au besoin.
     """
-    path = path if path is not None else DEFAULT_CONFIG_PATH
+    path = Path(path if path is not None else DEFAULT_CONFIG_PATH)
+    path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as handle:
         json.dump(config_to_dict(config), handle, ensure_ascii=False, indent=2)
 

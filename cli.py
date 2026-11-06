@@ -17,8 +17,16 @@ import sys
 
 from core.processor import standardize_file
 
-USAGE = "Usage : python cli.py [--sans-commentaires] <entrée.docx> [sortie.docx]"
 NO_COMMENTS_FLAG = "--sans-commentaires"
+
+
+def usage() -> str:
+    """Ligne d'aide, avec le nom réel de la commande (script ou exécutable)."""
+    if getattr(sys, "frozen", False):  # exécutable PyInstaller
+        program = os.path.basename(sys.executable)
+    else:
+        program = "python cli.py"
+    return f"Usage : {program} [{NO_COMMENTS_FLAG}] <entrée.docx> [sortie.docx]"
 
 
 def default_output_path(input_path: str) -> str:
@@ -46,7 +54,7 @@ def main(argv: list[str]) -> int:
     if unknown or not args:
         if unknown:
             print(f"Option inconnue : {unknown[0]}")
-        print(USAGE)
+        print(usage())
         return 2
 
     input_path = args[0]
@@ -66,5 +74,10 @@ def main(argv: list[str]) -> int:
     return 0
 
 
-if __name__ == "__main__":
+def run() -> None:
+    """Point d'entrée de la commande installée ``standardisation-rmn``."""
     raise SystemExit(main(sys.argv))
+
+
+if __name__ == "__main__":
+    run()

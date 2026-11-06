@@ -1,0 +1,4 @@
+-r requirements.txt
+pytest>=8.0.0
+# Construction des exécutables Windows (standardisation_rmn.spec).
+pyinstaller>=6.16

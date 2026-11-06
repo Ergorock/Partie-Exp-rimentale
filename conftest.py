@@ -21,6 +21,8 @@ from core import config as _config  # noqa: E402
 @pytest.fixture(autouse=True)
 def _isolated_rmn_config(tmp_path, monkeypatch):
     monkeypatch.setattr(_config, "DEFAULT_CONFIG_PATH", tmp_path / "rules_config.json")
+    # Ancien emplacement (racine du projet) neutralisé : jamais lu en test.
+    monkeypatch.setattr(_config, "LEGACY_CONFIG_PATH", tmp_path / "absent_legacy.json")
     _config.reset_config()
     yield
     _config.reset_config()

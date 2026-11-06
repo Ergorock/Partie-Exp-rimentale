@@ -49,7 +49,10 @@ ui/                     Interface, SEULE couche qui importe PySide6
 app.py                  Point d'entrée GUI
 cli.py                  Point d'entrée CLI
 tests/                  Tests pytest
-conftest.py             Rend la racine du projet importable par pytest
+conftest.py             Racine importable + isolation de la config RMN
+pyproject.toml          Paquet installable (commandes standardisation-rmn[-gui])
+requirements.txt        Dépendances d'exécution ; requirements-dev.txt ajoute pytest, pyinstaller
+standardisation_rmn.spec  Build PyInstaller : StandardisationRMN.exe (+ -cli.exe)
 ```
 
 ### Flux de traitement
@@ -181,7 +184,12 @@ tests.
 - `RmnConfig` centralise les paramètres éditables ; ses **défauts reproduisent
   exactement** le comportement historique (les tests existants doivent rester
   verts sans fichier de préférences).
-- Persistance dans `rules_config.json` à la racine (UTF-8, indenté).
+- Persistance dans `rules_config.json` (UTF-8, indenté) dans le dossier
+  utilisateur : `config.user_config_path()` (`%APPDATA%\StandardisationRMN`
+  sous Windows, `~/.config/standardisation-rmn` ailleurs, ou la variable
+  `STANDARDISATION_RMN_CONFIG`). Jamais dans le dossier de l'application.
+  L'ancien fichier à la racine (`LEGACY_CONFIG_PATH`) est seulement LU, tant
+  que le nouveau n'existe pas.
 - **Non versionné** (présent dans `.gitignore`) et recréé/relu sans exception
   s'il est absent ou corrompu. `config_from_dict` est tolérante champ par champ.
 - État de processus via `get_config` / `set_config` / `reset_config`. Les règles
@@ -250,7 +258,10 @@ réutilisable plutôt que de dupliquer.
 - Docstrings et commentaires **en français**, comme le reste du projet.
 - Suivre le style existant (dataclasses, type hints, regex nommées et
   commentées). Ne pas introduire de nouvelle dépendance sans raison ;
-  dépendances actuelles : `python-docx`, `PySide6`, `pytest`.
+  dépendances d'exécution : `python-docx`, `PySide6` ; de développement :
+  `pytest`, `pyinstaller` (construction des exécutables via
+  `standardisation_rmn.spec` ; le CLI exécutable exclut Qt, et les modèles
+  `docx/templates` doivent rester embarqués pour les commentaires Word).
 - Préférer des fonctions pures et testables dans `core/` ; isoler les effets de
   bord (I/O fichier, Qt).
 

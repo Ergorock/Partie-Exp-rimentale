@@ -6,6 +6,7 @@ tolérante (fichier absent / corrompu / partiel -> défauts champ par champ).
 """
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -162,4 +163,45 @@ def test_tests_never_read_project_config():
 
     project_file = Path(__file__).resolve().parent.parent / "rules_config.json"
     assert cfg.DEFAULT_CONFIG_PATH != project_file
+    assert cfg.LEGACY_CONFIG_PATH != project_file
     assert cfg.get_config() == RmnConfig()
+
+
+# --- Emplacement du fichier de préférences (dossier utilisateur) ---
+
+def test_user_config_path_windows():
+    path = cfg.user_config_path({"APPDATA": "C:/Users/x/AppData/Roaming"}, "win32")
+    assert path == Path("C:/Users/x/AppData/Roaming") / "StandardisationRMN" / "rules_config.json"
+
+
+def test_user_config_path_linux_xdg_and_home():
+    assert cfg.user_config_path({"XDG_CONFIG_HOME": "/cfg"}, "linux") == (
+        Path("/cfg") / "standardisation-rmn" / "rules_config.json"
+    )
+    assert cfg.user_config_path({"HOME": "/home/x"}, "linux") == (
+        Path("/home/x") / ".config" / "standardisation-rmn" / "rules_config.json"
+    )
+
+
+def test_user_config_path_env_override():
+    env = {"APPDATA": "C:/a", "STANDARDISATION_RMN_CONFIG": "D:/portable/prefs.json"}
+    assert cfg.user_config_path(env, "win32") == Path("D:/portable/prefs.json")
+
+
+def test_save_config_creates_parent_directory(tmp_path):
+    path = tmp_path / "nouveau" / "dossier" / "rules_config.json"
+    cfg.save_config(RmnConfig(sort_order="asc"), path)
+    assert cfg.load_config(path).sort_order == "asc"
+
+
+def test_legacy_project_file_is_read_when_user_file_absent(tmp_path, monkeypatch):
+    legacy = tmp_path / "ancien.json"
+    legacy.write_text('{"sort_order": "none"}', encoding="utf-8")
+    monkeypatch.setattr(cfg, "LEGACY_CONFIG_PATH", legacy)
+    monkeypatch.setattr(cfg, "DEFAULT_CONFIG_PATH", tmp_path / "user" / "rules_config.json")
+
+    assert cfg.load_config().sort_order == "none"
+    # Le prochain enregistrement va dans le dossier utilisateur.
+    cfg.save_config(RmnConfig(sort_order="asc"))
+    assert cfg.load_config().sort_order == "asc"
+    assert legacy.read_text(encoding="utf-8") == '{"sort_order": "none"}'

@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "standardisation-rmn"
+version = "0.1.0"
+description = "Standardise le formatage RMN (1H, 13C) d'une partie expérimentale de chimie organique dans un fichier Word."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "python-docx>=1.2.0",
+    "PySide6>=6.6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pyinstaller>=6.16",
+]
+
+[project.scripts]
+standardisation-rmn = "cli:run"
+
+[project.gui-scripts]
+standardisation-rmn-gui = "app:main"
+
+[tool.setuptools]
+py-modules = ["app", "cli"]
+
+[tool.setuptools.packages.find]
+include = ["core*", "ui*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
