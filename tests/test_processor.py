@@ -61,13 +61,16 @@ from docx import Document as NewDocument  # noqa: E402
 from core.processor import process_document  # noqa: E402
 
 
-def test_process_document_preserves_formatting_of_untouched_runs():
+def test_process_document_styles_1h_segment():
+    # La règle 1H produit désormais une sortie stylisée : le segment label +
+    # parenthèse est réécrit en gras et le δ en italique. Le style interne des
+    # runs d'origine du segment 1H est volontairement remplacé par ce style
+    # cible (ancienne assertion « run MHz reste italique » devenue obsolète).
     doc = NewDocument()
     p = doc.add_paragraph()
     p.add_run("1H NMR (400.18")
-    r_italic = p.add_run("MHz")  # fragment en italique
-    r_italic.italic = True
-    p.add_run(", DMF-d7, 298 ): δ = 9.18")
+    p.add_run("MHz")
+    p.add_run(", DMF-d7, 298 ): δ = 9.18 (s, 1H)")
 
     registry = build_default_registry()
     report = process_document(doc, registry)
@@ -76,6 +79,21 @@ def test_process_document_preserves_formatting_of_untouched_runs():
     assert report.changed_count == 1
     assert "400.18 MHz" in p.text
     assert "298 K" in p.text
-    # Le run "MHz" reste italique (mise en forme préservée).
-    italic_runs = [r for r in p.runs if "MHz" in r.text]
-    assert italic_runs and italic_runs[0].italic is True
+    # Sortie stylisée : au moins un run gras et un run italique.
+    assert any(r.bold is True for r in p.runs)
+    assert any(r.italic is True for r in p.runs)
+
+
+def test_process_document_preserves_runs_of_untouched_paragraph():
+    # Un paragraphe hors règles conserve intégralement ses runs et leur style.
+    doc = NewDocument()
+    p = doc.add_paragraph()
+    p.add_run("Texte ")
+    r = p.add_run("important")
+    r.bold = True
+    p.add_run(" sans règle.")
+
+    before = [(run.text, run.bold, run.italic) for run in p.runs]
+    process_document(doc, build_default_registry())
+    after = [(run.text, run.bold, run.italic) for run in p.runs]
+    assert before == after

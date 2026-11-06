@@ -15,7 +15,11 @@ def test_new_rule_is_discovered_by_registry():
 
 
 def test_new_rule_conforms_to_interface():
+    # La règle 13C est désormais implémentée : elle produit une sortie stylisée
+    # (label ¹³C exposant Unicode + parenthèse en gras, δ en italique) au lieu
+    # de laisser le texte inchangé / FLAGGED.
     rule = ThirteenCNmrRule()
-    result = rule.apply("13C NMR (100 MHz, CDCl3, 298 K)")
-    assert result.new_text == "13C NMR (100 MHz, CDCl3, 298 K)"
+    result = rule.apply("13C NMR (100 MHz, CDCl3, 298 K) δ 166.4 (C=O), 21.7 (CH3)")
     assert result.actions  # produit au moins une action
+    assert result.is_styled is True
+    assert result.new_text.startswith("¹³C NMR")

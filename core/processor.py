@@ -162,8 +162,9 @@ def available_rules() -> List:
     liste : elle apparaîtra automatiquement dans l'UI de gestion des règles.
     """
     from core.rules.nmr_1h import OneHNmrRule
+    from core.rules.nmr_13c import ThirteenCNmrRule
 
-    return [OneHNmrRule()]
+    return [OneHNmrRule(), ThirteenCNmrRule()]
 
 
 def build_registry(enabled_names: "set[str] | None" = None) -> RuleRegistry:

@@ -1,83 +1,39 @@
-"""Règle de standardisation des paragraphes ``1H NMR``.
+"""Règle de standardisation des paragraphes ``1H NMR`` (sortie stylisée).
 
-Format cible::
+Format cible (exposant Unicode, gras sur le label + la parenthèse, delta
+italique)::
 
-    1H NMR (<fréquence> MHz, <solvant>, <température> K) ...
+    ¹H NMR (<fréquence> MHz, <solvant>, <température> K) δ <signaux>
 
-La parenthèse qui suit immédiatement ``1H NMR`` doit contenir exactement trois
-éléments séparés par deux virgules, dans l'ordre : fréquence en MHz, solvant,
-température en Kelvin.
+Décisions utilisateur appliquées :
 
-Corrections automatiques appliquées (cas déductibles) :
-    - espace manquant entre le nombre et ``MHz`` (``400.18MHz`` -> ``400.18 MHz``) ;
-    - unité ``MHz`` manquante quand le premier élément est un simple nombre ;
-    - unité ``K`` manquante sur la température (``298`` -> ``298 K``) ;
-    - fréquence écrite hors de la parenthèse, déplacée à l'intérieur en tête.
-
-Quand une donnée ne peut pas être déduite (température totalement absente), un
-marqueur visible ``[??? K]`` est inséré. Quand le paragraphe n'a pas de
-parenthèse exploitable, il est signalé sans correction.
+- le mot d'entrée est conservé (``1H NMR`` -> ``¹H NMR``, ``1H RMN`` -> ``¹H RMN``) ;
+- la parenthèse comporte trois éléments (fréquence MHz, solvant, température K)
+  avec ``[??? K]`` si la température manque ;
+- la règle ne traite QUE son segment de section (du label ``1H NMR`` jusqu'au
+  prochain label de section RMN), laissant le reste du paragraphe intact ;
+- les signaux sont triés du déplacement le plus grand au plus petit uniquement
+  si tous sont parsables ; sinon aucun réordonnancement et une action FLAGGED.
 """
 
 from __future__ import annotations
 
 import re
 
-from core.rules.base import Action, ActionKind, Rule, RuleResult
+from core.rules.base import Action, ActionKind, Rule, RuleResult, StyledSegment
+from core.rules import nmr_common
 
-# Marqueur inséré lorsqu'une température est attendue mais introuvable.
-TEMPERATURE_PLACEHOLDER = "[??? K]"
+# Préfixe reconnu en tête de paragraphe (insensible à la casse / aux espaces).
+# Le mot d'entrée peut être 'NMR' ou 'RMN' (conservé tel quel en sortie).
+_PREFIX_RE = re.compile(r"^\s*1H\s*(?:NMR|RMN)\b", re.IGNORECASE)
 
-# Préfixe reconnu en tête de paragraphe (insensible aux espaces de début).
-_PREFIX_RE = re.compile(r"^\s*1H\s*NMR\b", re.IGNORECASE)
-
-# Capture : "1H NMR" + éventuel texte avant la parenthèse + contenu de la 1re parenthèse + reste.
+# Structure d'un segment 1H : label + texte avant parenthèse + parenthèse + reste.
 _STRUCTURE_RE = re.compile(
-    r"^(?P<indent>\s*)(?P<label>1H\s*NMR)\b(?P<between>[^(]*)\((?P<inside>[^)]*)\)(?P<rest>.*)$",
+    r"^(?P<label>1H\s*(?:NMR|RMN))\b(?P<between>[^(]*)\((?P<inside>[^)]*)\)(?P<rest>.*)$",
     re.IGNORECASE | re.DOTALL,
 )
 
-# Un nombre (entier ou décimal).
 _NUMBER_RE = re.compile(r"\d+(?:\.\d+)?")
-
-
-def _normalize_spaces(text: str) -> str:
-    """Remplace les espaces insécables par des espaces ordinaires."""
-    return text.replace("\xa0", " ")
-
-
-def _normalize_frequency(freq: str) -> tuple[str, bool]:
-    """Normalise l'élément fréquence vers ``<nombre> MHz``.
-
-    Returns:
-        (texte_normalisé, modifié).
-    """
-    original = freq
-    freq = freq.strip()
-    # Ajoute l'espace manquant entre le nombre et MHz : 400.18MHz -> 400.18 MHz.
-    freq = re.sub(r"(\d)\s*(MHz)", r"\1 \2", freq, flags=re.IGNORECASE)
-    # Uniformise la casse de l'unité.
-    freq = re.sub(r"\bmhz\b", "MHz", freq, flags=re.IGNORECASE)
-    # Si c'est un simple nombre sans unité, on ajoute MHz.
-    if _NUMBER_RE.fullmatch(freq):
-        freq = f"{freq} MHz"
-    freq = re.sub(r"\s+", " ", freq).strip()
-    return freq, freq != original.strip()
-
-
-def _normalize_temperature(temp: str) -> tuple[str, bool]:
-    """Normalise l'élément température vers ``<nombre> K``.
-
-    Returns:
-        (texte_normalisé, modifié).
-    """
-    original = temp
-    temp = temp.strip()
-    number = _NUMBER_RE.search(temp)
-    if not number:
-        return temp, False
-    normalized = f"{number.group()} K"
-    return normalized, normalized != original.strip()
 
 
 def _looks_like_frequency(segment: str) -> bool:
@@ -85,25 +41,44 @@ def _looks_like_frequency(segment: str) -> bool:
     return bool(re.search(r"\d+(?:\.\d+)?\s*MHz", segment, re.IGNORECASE))
 
 
+_KIND_MAP = {
+    "corrected": ActionKind.CORRECTED,
+    "placeholder": ActionKind.PLACEHOLDER,
+    "flagged": ActionKind.FLAGGED,
+}
+
+
 class OneHNmrRule(Rule):
-    """Valide et standardise les paragraphes ``1H NMR``."""
+    """Valide et standardise les paragraphes ``1H NMR`` (sortie stylisée)."""
 
     name = "1H NMR"
     description = (
-        "Fréquence (MHz), solvant et température (K) entre parenthèses après "
-        "'1H NMR' ; corrige espaces/unités, insère [??? K] si la température "
-        "manque."
+        "Format stylisé : label ¹H exposant Unicode (NMR/RMN conservé) et "
+        "parenthèse (MHz, solvant, K) en gras, δ en italique, signaux triés du "
+        "plus grand au plus petit (si tous parsables), [??? K] si température "
+        "absente."
     )
 
     def applies(self, paragraph_text: str) -> bool:
         return bool(_PREFIX_RE.match(paragraph_text))
 
     def apply(self, paragraph_text: str) -> RuleResult:
-        text = _normalize_spaces(paragraph_text)
-        match = _STRUCTURE_RE.match(text)
+        text = nmr_common.normalize_spaces(paragraph_text)
 
+        # 1) Délimiter le segment 1H (du label au prochain label de section).
+        # normalize_spaces est un remplacement caractère par caractère : les
+        # positions dans ``text`` et ``paragraph_text`` coïncident. On garde la
+        # sous-chaîne ORIGINALE (avec ses \xa0) comme replaced_text pour que
+        # docx_io.apply_styled_edit la retrouve dans le paragraphe réel.
+        seg_start, seg_end = nmr_common.section_span(text, 0)
+        segment = text[seg_start:seg_end]
+        original_segment = paragraph_text[seg_start:seg_end]
+        prefix = text[:seg_start]
+        suffix = text[seg_end:]
+
+        match = _STRUCTURE_RE.match(segment)
         if not match:
-            # Pas de parenthèse après "1H NMR" : on ne peut pas corriger sûrement.
+            # Pas de parenthèse exploitable : impossible de corriger sûrement.
             return RuleResult(
                 new_text=paragraph_text,
                 actions=[
@@ -116,18 +91,17 @@ class OneHNmrRule(Rule):
                 ],
             )
 
-        indent = match.group("indent")
+        label = match.group("label")
         between = match.group("between")
         inside = match.group("inside")
         rest = match.group("rest")
 
         actions: list[Action] = []
 
-        # Fréquence placée hors de la parenthèse -> on la déplace à l'intérieur.
+        # 2) Fréquence placée hors de la parenthèse -> on la déplace à l'intérieur.
         if _looks_like_frequency(between):
             freq_segment = between.strip()
             inside = f"{freq_segment}, {inside.strip()}"
-            between = " "
             actions.append(
                 Action(
                     ActionKind.CORRECTED,
@@ -136,79 +110,54 @@ class OneHNmrRule(Rule):
                 )
             )
 
-        # Découpe les éléments de la parenthèse.
-        elements = [e.strip() for e in inside.split(",")]
+        # 3) Normaliser la parenthèse à trois éléments.
+        paren = nmr_common.normalize_parenthesis(inside)
+        for kind, message in paren.actions:
+            actions.append(Action(_KIND_MAP[kind], message, self.name))
 
-        # Normalise la fréquence (1er élément).
-        if elements and elements[0]:
-            new_freq, changed = _normalize_frequency(elements[0])
-            if changed:
-                actions.append(
-                    Action(
-                        ActionKind.CORRECTED,
-                        f"Fréquence normalisée : '{elements[0]}' -> '{new_freq}'.",
-                        self.name,
-                    )
-                )
-            elements[0] = new_freq
+        # 4) Construire le label stylisé (exposant Unicode, mot d'entrée conservé).
+        styled_label = nmr_common.superscript_label(label)
+        label_paren = f"{styled_label} ({paren.text})"
 
-        # Gère le nombre d'éléments pour la température (3e élément).
-        if len(elements) >= 3:
-            new_temp, changed = _normalize_temperature(elements[2])
-            if not _NUMBER_RE.search(elements[2]):
-                # 3e élément présent mais sans nombre -> placeholder.
-                elements[2] = TEMPERATURE_PLACEHOLDER
-                actions.append(
-                    Action(
-                        ActionKind.PLACEHOLDER,
-                        "Température illisible : marqueur inséré.",
-                        self.name,
-                    )
-                )
-            else:
-                if changed:
-                    actions.append(
-                        Action(
-                            ActionKind.CORRECTED,
-                            f"Température normalisée : '{elements[2]}' -> '{new_temp}'.",
-                            self.name,
-                        )
-                    )
-                elements[2] = new_temp
-            # Éléments surnuméraires (>3) : signalés.
-            if len(elements) > 3:
+        # 5) Isoler et formater les signaux (après le delta).
+        body = nmr_common.split_delta_body(rest)
+        signals_text = ""
+        if body is not None:
+            signals, all_parsable = nmr_common.parse_signals(body)
+            if not all_parsable:
                 actions.append(
                     Action(
                         ActionKind.FLAGGED,
-                        f"La parenthèse contient {len(elements)} éléments au lieu de 3.",
+                        "Un ou plusieurs signaux n'ont pas pu être analysés : "
+                        "aucun réordonnancement effectué, vérification manuelle.",
                         self.name,
                     )
                 )
-        elif len(elements) == 2:
-            # Température absente -> placeholder.
-            elements.append(TEMPERATURE_PLACEHOLDER)
-            actions.append(
-                Action(
-                    ActionKind.PLACEHOLDER,
-                    "Température absente : marqueur '[??? K]' inséré.",
-                    self.name,
-                )
-            )
+            ordered = nmr_common.sort_signals(signals, all_parsable)
+            signals_text = ", ".join(nmr_common.format_signal_1h(s) for s in ordered)
         else:
-            # 0 ou 1 élément : trop incomplet pour corriger sûrement.
+            # Pas de delta/liste de signaux : on signale sans inventer de chimie.
             actions.append(
                 Action(
                     ActionKind.FLAGGED,
-                    "Parenthèse incomplète (moins de 2 éléments) : "
+                    "Liste de signaux introuvable (symbole δ absent) : "
                     "vérification manuelle requise.",
                     self.name,
                 )
             )
 
-        new_inside = ", ".join(elements)
-        new_text = f"{indent}{match.group('label')}{between.rstrip()} ({new_inside}){rest}"
-        # Nettoyage d'un éventuel double espace avant la parenthèse.
-        new_text = re.sub(r"\s+\(", " (", new_text, count=1)
+        # 6) Reconstruire le segment reformaté et le paragraphe complet.
+        segments = [
+            StyledSegment(label_paren, bold=True),
+            StyledSegment(" "),
+            StyledSegment(nmr_common.DELTA, italic=True),
+        ]
+        segment_plain = f"{label_paren} {nmr_common.DELTA}"
+        if signals_text:
+            segments.append(StyledSegment(f" {signals_text}"))
+            segment_plain += f" {signals_text}"
+
+        new_text = f"{prefix}{segment_plain}{suffix}"
 
         if new_text == paragraph_text:
             return RuleResult(
@@ -220,7 +169,12 @@ class OneHNmrRule(Rule):
 
         if not actions:
             actions.append(
-                Action(ActionKind.UNCHANGED, "Paragraphe déjà conforme.", self.name)
+                Action(ActionKind.CORRECTED, "Paragraphe reformaté.", self.name)
             )
 
-        return RuleResult(new_text=new_text, actions=actions)
+        return RuleResult(
+            new_text=new_text,
+            actions=actions,
+            segments=segments,
+            replaced_text=original_segment,
+        )
