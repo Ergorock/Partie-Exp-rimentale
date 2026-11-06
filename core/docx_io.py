@@ -208,7 +208,10 @@ def apply_text_edit(paragraph: Paragraph, old_text: str, new_text: str) -> bool:
             continue
 
     for run, text in zip(runs, new_run_texts):
-        run.text = text
+        # On ne réécrit que les runs modifiés : le setter ``run.text`` efface
+        # tout contenu non textuel du run (référence de commentaire, image…).
+        if run.text != text:
+            run.text = text
     return True
 
 
@@ -287,17 +290,68 @@ def _segment_run(paragraph: Paragraph, segment: "StyledSegment", rpr):
 
 
 def _replace_runs(paragraph: Paragraph, new_elements) -> None:
-    """Remplace les runs directs du paragraphe par ``new_elements``, à leur place.
+    """Remplace les runs TEXTUELS du paragraphe par ``new_elements``, à leur place.
 
-    Les nouveaux runs sont insérés avant le premier run d'origine : les autres
-    éléments du paragraphe (signets…) gardent leur position relative.
+    Les nouveaux runs sont insérés avant le premier run textuel d'origine : les
+    autres éléments du paragraphe (signets, bornes de commentaire…) gardent leur
+    position relative. Les runs sans texte (référence de commentaire, appel de
+    note, image…) sont conservés : ils ne portent aucun caractère, donc aucune
+    position de texte, et les supprimer détruirait leur contenu.
     """
-    runs = paragraph.runs
-    anchor = runs[0]._element
+    text_runs = [run for run in paragraph.runs if run.text]
+    if not text_runs:
+        return
+    anchor = text_runs[0]._element
     for element in new_elements:
         anchor.addprevious(element)
-    for run in runs:
+    for run in text_runs:
         run._element.getparent().remove(run._element)
+
+
+# --------------------------------------------------------------------------- #
+# Commentaires Word
+# --------------------------------------------------------------------------- #
+
+def paragraph_comment_ids(paragraph: Paragraph) -> List[int]:
+    """Identifiants des commentaires ancrés dans le paragraphe."""
+    ids: List[int] = []
+    for tag in ("w:commentRangeStart", "w:commentReference"):
+        for element in paragraph._p.iter(qn(tag)):
+            value = element.get(qn("w:id"))
+            if value is not None and value.lstrip("-").isdigit() and int(value) not in ids:
+                ids.append(int(value))
+    return ids
+
+
+def add_paragraph_comment(
+    document: DocumentObject,
+    paragraph: Paragraph,
+    lines: List[str],
+    author: str,
+    initials: str = "",
+) -> bool:
+    """Ancre un commentaire Word sur tout le texte du paragraphe.
+
+    Une ligne de ``lines`` par paragraphe du commentaire. Rien n'est ajouté
+    (retour ``False``) si :
+
+    - le paragraphe n'est pas dans le corps du document : Word n'accepte pas
+      de commentaire dans un en-tête ou un pied de page ;
+    - il n'a aucun run textuel sur lequel ancrer le commentaire ;
+    - il porte déjà un commentaire de ``author`` (pas de doublon quand on
+      retraite un document déjà annoté).
+    """
+    if not lines or paragraph.part is not document.part:
+        return False
+    runs = [run for run in paragraph.runs if run.text]
+    if not runs:
+        return False
+    for comment_id in paragraph_comment_ids(paragraph):
+        existing = document.comments.get(comment_id)
+        if existing is not None and existing.author == author:
+            return False
+    document.add_comment(runs, text="\n".join(lines), author=author, initials=initials)
+    return True
 
 
 def _rewrite_from_new_text(

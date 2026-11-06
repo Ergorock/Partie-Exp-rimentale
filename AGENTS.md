@@ -23,7 +23,7 @@ et plus tard HRMS, IR…) est une **règle** indépendante.
 Trois façons de lancer :
 
 - interface graphique : `python app.py` (PySide6) ;
-- ligne de commande : `python cli.py <entrée.docx> [sortie.docx]` ;
+- ligne de commande : `python cli.py [--sans-commentaires] <entrée.docx> [sortie.docx]` ;
 - en bibliothèque : `core.processor.standardize_file(...)`.
 
 ---
@@ -76,7 +76,16 @@ conftest.py             Rend la racine du projet importable par pytest
    - `apply_styled_edit` copie le `rPr` des runs conservés et donne aux segments
      le `rPr` du run dominant de la portion remplacée (sans gras / italique /
      `vertAlign`). Son repli ne supprime jamais de texte.
-4. `docx_io.save` écrit le résultat ; un `ProcessingReport` est retourné.
+4. Avec `annotate` (défaut de `standardize_file`, du CLI et de l'UI ;
+   défaut `False` pour `process_document`), chaque paragraphe du corps qui
+   porte une action `FLAGGED` / `PLACEHOLDER` reçoit un commentaire Word
+   (`docx_io.add_paragraph_comment`, auteur `processor.COMMENT_AUTHOR`).
+   Ignorés : en-têtes / pieds de page (refusés par Word), paragraphe sans run
+   textuel, paragraphe portant déjà un commentaire de cet auteur (pas de
+   doublon au retraitement). `ProcessingReport.comment_count` les compte.
+   Invariant d'édition : les runs SANS texte (référence de commentaire, appel
+   de note, image) ne sont jamais supprimés ni réécrits par `docx_io`.
+5. `docx_io.save` écrit le résultat ; un `ProcessingReport` est retourné.
    `standardize_file` lève `ValueError` si la sortie est le fichier d'entrée
    (`processor.same_file`) : l'original n'est jamais écrasé.
 

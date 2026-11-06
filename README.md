@@ -157,6 +157,22 @@ Le fichier d'entrée n'est jamais écrasé : une sortie qui désigne le même
 fichier (y compris avec une autre casse sous Windows) est refusée, dans l'UI
 comme dans le CLI.
 
+### Commentaires Word sur les points à vérifier
+
+Par défaut, chaque paragraphe qui porte un signalement « à vérifier » ou un
+marqueur inséré (`[??? K]`…) reçoit un **commentaire Word** dans le fichier de
+sortie (auteur « Standardisation RMN »), qui liste ces signalements. On les
+traite donc directement dans Word, au bon endroit ; les corrections sûres ne
+génèrent pas de commentaire. La case **Ajouter un commentaire Word sur chaque
+paragraphe à vérifier** de la fenêtre (cochée par défaut) ou l'option
+`--sans-commentaires` du CLI les désactivent.
+
+- Les commentaires déjà présents dans le document (relecteurs) sont conservés,
+  y compris sur les paragraphes corrigés.
+- Retraiter un document déjà annoté n'ajoute pas de doublon.
+- Word n'accepte pas de commentaire dans un en-tête ou un pied de page : ces
+  signalements restent visibles dans le rapport seulement.
+
 ### Paramètres
 
 La fenêtre principale expose un bouton **Paramètres** qui ouvre un dialogue
@@ -196,6 +212,8 @@ est automatiquement recréé aux valeurs par défaut s'il est absent ou corrompu
 python cli.py "partie exp.docx"
 # ou en précisant la sortie :
 python cli.py "partie exp.docx" "resultat.docx"
+# sans commentaires Word :
+python cli.py --sans-commentaires "partie exp.docx"
 ```
 
 ## Tests

@@ -83,6 +83,17 @@ class MainWindow(QMainWindow):
             self.rule_checkboxes[info.name] = cb
         layout.addWidget(rules_box)
 
+        # --- Commentaires Word sur les points à vérifier ---
+        self.annotate_check = QCheckBox(
+            "Ajouter un commentaire Word sur chaque paragraphe à vérifier"
+        )
+        self.annotate_check.setChecked(True)
+        self.annotate_check.setToolTip(
+            "Les signalements (« à vérifier », marqueurs insérés) apparaissent "
+            "dans le fichier de sortie, en commentaire sur le paragraphe concerné."
+        )
+        layout.addWidget(self.annotate_check)
+
         # --- Bouton Paramètres ---
         self.settings_button = QPushButton("Paramètres")
         self.settings_button.clicked.connect(self._open_settings)
@@ -146,7 +157,9 @@ class MainWindow(QMainWindow):
             self.output_edit.setText(output_path)
 
         enabled = self._selected_rule_names()
-        outcome = run_standardization(input_path, output_path, enabled)
+        outcome = run_standardization(
+            input_path, output_path, enabled, annotate=self.annotate_check.isChecked()
+        )
         if not outcome.success:
             QMessageBox.warning(self, "Impossible de standardiser", outcome.message)
             return

@@ -11,6 +11,24 @@ from core.rules.base import Action, ActionKind
 from core.rules.registry import RuleRegistry
 
 
+# Libellés des types d'action, partagés par le rapport et les commentaires Word.
+KIND_LABELS = {
+    ActionKind.CORRECTED: "CORRIGÉ",
+    ActionKind.PLACEHOLDER: "MARQUEUR",
+    ActionKind.FLAGGED: "À VÉRIFIER",
+    ActionKind.UNCHANGED: "CONFORME",
+}
+
+# Types d'action qui demandent une intervention humaine : reportés en
+# commentaire Word dans le fichier de sortie.
+_ANNOTATED_KINDS = (ActionKind.FLAGGED, ActionKind.PLACEHOLDER)
+
+#: Auteur des commentaires Word ajoutés par l'outil (sert aussi à les
+#: reconnaître pour ne pas les dupliquer lors d'un nouveau traitement).
+COMMENT_AUTHOR = "Standardisation RMN"
+COMMENT_INITIALS = "SR"
+
+
 @dataclass
 class ParagraphReport:
     """Rapport des actions réalisées sur un paragraphe."""
@@ -38,6 +56,8 @@ class ProcessingReport:
     """Rapport global du traitement d'un document."""
 
     paragraphs: List[ParagraphReport] = field(default_factory=list)
+    #: Nombre de commentaires Word ajoutés dans le document de sortie.
+    comment_count: int = 0
 
     @property
     def changed_count(self) -> int:
@@ -53,16 +73,10 @@ class ProcessingReport:
             return "Aucune correction : aucun paragraphe concerné par les règles."
 
         lines: List[str] = []
-        kind_labels = {
-            ActionKind.CORRECTED: "CORRIGÉ",
-            ActionKind.PLACEHOLDER: "MARQUEUR",
-            ActionKind.FLAGGED: "À VÉRIFIER",
-            ActionKind.UNCHANGED: "CONFORME",
-        }
         for pr in self.paragraphs:
             lines.append(f"{pr.label} :")
             for action in pr.actions:
-                label = kind_labels.get(action.kind, action.kind.value)
+                label = KIND_LABELS.get(action.kind, action.kind.value)
                 prefix = f"[{action.rule_name}] " if action.rule_name else ""
                 lines.append(f"  - {label} : {prefix}{action.message}")
             if pr.changed:
@@ -73,6 +87,11 @@ class ProcessingReport:
             f"{self.changed_count} paragraphe(s) modifié(s), "
             f"{self.action_count} action(s) au total.\n"
         )
+        if self.comment_count:
+            header += (
+                f"{self.comment_count} commentaire(s) Word ajouté(s) sur les "
+                "points à vérifier.\n"
+            )
         return header + "\n".join(lines)
 
 
@@ -110,7 +129,19 @@ def process_texts(texts: List[str], registry: RuleRegistry) -> ProcessingReport:
     return report
 
 
-def process_document(document, registry: RuleRegistry) -> ProcessingReport:
+def comment_lines(actions: List[Action]) -> List[str]:
+    """Lignes du commentaire Word d'un paragraphe : ses actions à vérifier."""
+    lines = []
+    for action in actions:
+        if action.kind in _ANNOTATED_KINDS:
+            prefix = f"[{action.rule_name}] " if action.rule_name else ""
+            lines.append(f"{KIND_LABELS[action.kind]} : {prefix}{action.message}")
+    return lines
+
+
+def process_document(
+    document, registry: RuleRegistry, annotate: bool = False
+) -> ProcessingReport:
     """Applique les règles à un document python-docx et réécrit les paragraphes.
 
     Modifie le document en place (le texte corrigé est écrit dans les
@@ -118,6 +149,10 @@ def process_document(document, registry: RuleRegistry) -> ProcessingReport:
     paragraphes sont traités : corps, tableaux (imbriqués compris), en-têtes
     et pieds de page (voir ``docx_io.iter_paragraphs``). ``index`` reste la
     position dans le corps pour les paragraphes du corps.
+
+    Avec ``annotate``, chaque paragraphe du corps qui porte une action à
+    vérifier (FLAGGED / PLACEHOLDER) reçoit un commentaire Word listant ces
+    actions (voir ``docx_io.add_paragraph_comment`` pour les cas ignorés).
     """
     report = ProcessingReport()
     for index, (location, paragraph) in enumerate(docx_io.iter_paragraphs(document)):
@@ -166,6 +201,10 @@ def process_document(document, registry: RuleRegistry) -> ProcessingReport:
                 location=location,
             )
         )
+        if annotate and docx_io.add_paragraph_comment(
+            document, paragraph, comment_lines(actions), COMMENT_AUTHOR, COMMENT_INITIALS
+        ):
+            report.comment_count += 1
     return report
 
 
@@ -219,6 +258,7 @@ def standardize_file(
     input_path: str,
     output_path: str,
     enabled_names: "set[str] | None" = None,
+    annotate: bool = True,
 ) -> ProcessingReport:
     """Charge un .docx, applique les règles sélectionnées, sauvegarde le résultat.
 
@@ -226,6 +266,7 @@ def standardize_file(
         input_path: chemin du .docx d'entrée.
         output_path: chemin du .docx de sortie à écrire.
         enabled_names: noms des règles à appliquer (toutes si ``None``).
+        annotate: ajoute un commentaire Word sur chaque paragraphe à vérifier.
 
     Returns:
         Le rapport des actions réalisées.
@@ -241,6 +282,6 @@ def standardize_file(
         )
     document = docx_io.load(input_path)
     registry = build_registry(enabled_names)
-    report = process_document(document, registry)
+    report = process_document(document, registry, annotate=annotate)
     docx_io.save(document, output_path)
     return report

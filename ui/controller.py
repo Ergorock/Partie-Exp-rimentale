@@ -64,6 +64,7 @@ def run_standardization(
     input_path: str,
     output_path: str,
     enabled_names: "set[str] | None" = None,
+    annotate: bool = True,
 ) -> StandardizeOutcome:
     """Exécute la standardisation et retourne un résultat pour l'affichage.
 
@@ -72,6 +73,7 @@ def run_standardization(
         output_path: chemin du .docx de sortie.
         enabled_names: règles à appliquer (toutes si ``None``). Un ensemble
             vide signifie « aucune règle sélectionnée » et est rejeté.
+        annotate: ajoute un commentaire Word sur chaque paragraphe à vérifier.
 
     Capture les erreurs pour que l'UI puisse les présenter proprement.
     """
@@ -93,7 +95,7 @@ def run_standardization(
         return StandardizeOutcome(False, "Aucune règle sélectionnée.")
 
     try:
-        report = standardize_file(input_path, output_path, enabled_names)
+        report = standardize_file(input_path, output_path, enabled_names, annotate=annotate)
     except Exception as exc:  # pragma: no cover - dépend de l'environnement
         return StandardizeOutcome(False, f"Erreur pendant le traitement : {exc}")
 
