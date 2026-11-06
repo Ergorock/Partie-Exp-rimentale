@@ -145,6 +145,16 @@ python app.py
 4. Lire le rapport des corrections dans la fenêtre ; le `.docx` corrigé est
    écrit à l'emplacement de sortie.
 
+Tout le document est traité : corps du texte, tableaux (imbriqués compris),
+en-têtes et pieds de page. Le rapport indique l'emplacement de chaque
+paragraphe (`Paragraphe 3`, `Tableau 1, ligne 2, cellule 1, paragraphe 1`,
+`En-tête (section 1), paragraphe 1`…). Les notes de bas de page ne sont pas
+traitées (non exposées par `python-docx`).
+
+Le fichier d'entrée n'est jamais écrasé : une sortie qui désigne le même
+fichier (y compris avec une autre casse sous Windows) est refusée, dans l'UI
+comme dans le CLI.
+
 ### Paramètres
 
 La fenêtre principale expose un bouton **Paramètres** qui ouvre un dialogue
@@ -154,7 +164,8 @@ principale. Paramètres éditables :
 - **Multiplicités reconnues** : table des correspondances entrée → normalisée
   (par exemple `bs` → `br s`). Les boutons **Ajouter** et **Retirer** gèrent les
   lignes ; une ligne dont l'entrée est vide est ignorée, et une valeur
-  normalisée vide reprend l'entrée comme valeur.
+  normalisée vide reprend l'entrée comme valeur. L'entrée est insensible à la
+  casse et aux espaces multiples (`Td` et `td` sont équivalents).
 - **Marqueur de donnée manquante** : texte inséré lorsqu'une température est
   absente ou illisible (défaut `[??? K]`).
 - **Sens du tri des signaux** : décroissant (défaut), croissant ou aucun tri.

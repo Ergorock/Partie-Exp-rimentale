@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from difflib import SequenceMatcher
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Iterator, List, Optional, Tuple
 
 from docx import Document
 from docx.document import Document as DocumentObject
@@ -62,24 +62,74 @@ def paragraph_texts(document: DocumentObject) -> List[str]:
     return [p.text for p in document.paragraphs]
 
 
-def set_paragraph_text(paragraph: Paragraph, new_text: str) -> None:
-    """Remplace tout le texte d'un paragraphe (sans préserver les styles internes).
+# En-têtes / pieds de page d'une section : (libellé, attribut python-docx).
+_HEADER_FOOTER_PARTS = (
+    ("En-tête", "header"),
+    ("En-tête (première page)", "first_page_header"),
+    ("En-tête (pages paires)", "even_page_header"),
+    ("Pied de page", "footer"),
+    ("Pied de page (première page)", "first_page_footer"),
+    ("Pied de page (pages paires)", "even_page_footer"),
+)
 
-    Le nouveau texte est écrit dans le premier run existant ; les runs suivants
-    sont vidés. Utilisé en dernier recours. Préférer ``apply_text_edit`` pour
-    conserver la mise en forme.
 
-    Args:
-        paragraph: le paragraphe à modifier.
-        new_text: le nouveau texte à écrire.
+def iter_paragraphs(document: DocumentObject) -> Iterator[Tuple[str, Paragraph]]:
+    """Parcourt TOUS les paragraphes éditables du document, chacun une fois.
+
+    Ordre : paragraphes du corps (libellé vide : le processor les numérote
+    comme avant), puis tableaux du corps (récursivement, tableaux imbriqués
+    compris), puis en-têtes et pieds de page de chaque section.
+
+    Un paragraphe n'est produit qu'une fois : les cellules fusionnées (que
+    python-docx répète) et les en-têtes liés à la section précédente (non
+    parcourus, pour ne pas créer de définition vide) sont ignorés.
+
+    Les notes de bas de page ne sont pas exposées par python-docx et ne sont
+    donc pas traitées.
+
+    Yields:
+        Des couples ``(libellé, paragraphe)``.
     """
-    if not paragraph.runs:
-        paragraph.add_run(new_text)
-        return
+    # On garde une référence sur chaque élément vu : lxml renvoie alors le même
+    # objet proxy pour un même nœud, ce qui rend le test d'identité fiable.
+    seen: List = []
+    seen_ids = set()
 
-    paragraph.runs[0].text = new_text
-    for run in paragraph.runs[1:]:
-        run.text = ""
+    def fresh(element) -> bool:
+        if id(element) in seen_ids:
+            return False
+        seen.append(element)
+        seen_ids.add(id(element))
+        return True
+
+    def walk_tables(tables, prefix: str):
+        for t_index, table in enumerate(tables, start=1):
+            t_label = f"{prefix}tableau {t_index}" if prefix else f"Tableau {t_index}"
+            for r_index, row in enumerate(table.rows, start=1):
+                for c_index, cell in enumerate(row.cells, start=1):
+                    if not fresh(cell._tc):
+                        continue
+                    c_label = f"{t_label}, ligne {r_index}, cellule {c_index}"
+                    for p_index, paragraph in enumerate(cell.paragraphs, start=1):
+                        if fresh(paragraph._p):
+                            yield f"{c_label}, paragraphe {p_index}", paragraph
+                    yield from walk_tables(cell.tables, f"{c_label} > ")
+
+    for paragraph in document.paragraphs:
+        if fresh(paragraph._p):
+            yield "", paragraph
+    yield from walk_tables(document.tables, "")
+
+    for s_index, section in enumerate(document.sections, start=1):
+        for part_label, attr in _HEADER_FOOTER_PARTS:
+            part = getattr(section, attr)
+            if part.is_linked_to_previous:
+                continue
+            label = f"{part_label} (section {s_index})"
+            for p_index, paragraph in enumerate(part.paragraphs, start=1):
+                if fresh(paragraph._p):
+                    yield f"{label}, paragraphe {p_index}", paragraph
+            yield from walk_tables(part.tables, f"{label} > ")
 
 
 def apply_text_edit(paragraph: Paragraph, old_text: str, new_text: str) -> bool:

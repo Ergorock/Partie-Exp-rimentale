@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional, Optional
+from typing import List, Optional
 
 
 class ActionKind(str, Enum):

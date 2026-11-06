@@ -85,8 +85,9 @@ def config_from_dict(data: dict) -> RmnConfig:
     Chaque champ absent ou du mauvais type retombe sur le défaut de
     ``RmnConfig()``. ``sort_order`` et ``temperature_unit`` sont validés contre
     leurs ensembles autorisés. Pour ``multiplicities``, seules les paires
-    ``str -> str`` sont conservées ; une valeur normalisée vide prend la clé
-    comme valeur.
+    ``str -> str`` sont conservées ; la clé est normalisée (espaces retirés,
+    minuscules) car la recherche se fait sur le token en minuscules, et une
+    valeur normalisée vide prend la clé comme valeur.
     """
     defaults = RmnConfig()
 
@@ -100,6 +101,9 @@ def config_from_dict(data: dict) -> RmnConfig:
         cleaned: Dict[str, str] = {}
         for key, value in raw_mult.items():
             if not isinstance(key, str) or not isinstance(value, str):
+                continue
+            key = " ".join(key.split()).lower()
+            if not key:
                 continue
             normalized = value.strip()
             cleaned[key] = normalized if normalized else key

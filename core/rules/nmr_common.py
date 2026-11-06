@@ -32,9 +32,6 @@ from typing import List, Optional, Tuple
 
 from core.config import RmnConfig, get_config
 
-# Marqueur inséré lorsqu'une température est attendue mais introuvable.
-TEMPERATURE_PLACEHOLDER = "[??? K]"
-
 # Symbole delta standard produit en sortie (italique géré par la règle).
 DELTA = "\u03b4"  # δ
 
@@ -301,7 +298,7 @@ def normalize_parenthesis(
     elif len(elements) == 2:
         elements.append(config.temperature_placeholder)
         actions.append(
-            ("placeholder", "Température absente : marqueur '[??? K]' inséré.")
+            ("placeholder", f"Température absente : marqueur '{config.temperature_placeholder}' inséré.")
         )
     else:
         actions.append(
@@ -453,7 +450,7 @@ def _parse_multiplicity(
 ) -> Optional[str]:
     """Reconnaît une multiplicité autorisée dans un token, ou None."""
     config = config or get_config()
-    token = token.strip().lower()
+    token = " ".join(token.split()).lower()
     return config.multiplicities.get(token)
 
 

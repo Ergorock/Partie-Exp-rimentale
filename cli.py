@@ -44,7 +44,11 @@ def main(argv: list[str]) -> int:
         return 1
 
     output_path = argv[2] if len(argv) > 2 else default_output_path(input_path)
-    report = standardize_file(input_path, output_path)
+    try:
+        report = standardize_file(input_path, output_path)
+    except ValueError as exc:
+        print(exc)
+        return 1
 
     print(f"Fichier standardisé écrit : {output_path}\n")
     print(report.summary())

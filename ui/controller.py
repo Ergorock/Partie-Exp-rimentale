@@ -10,7 +10,7 @@ import os
 from dataclasses import dataclass
 from typing import List
 
-from core.processor import ProcessingReport, available_rules, standardize_file
+from core.processor import ProcessingReport, available_rules, same_file, standardize_file
 
 
 @dataclass
@@ -65,6 +65,12 @@ def run_standardization(
         return StandardizeOutcome(False, "Le fichier d'entrée doit être un .docx.")
     if not output_path:
         return StandardizeOutcome(False, "Aucun fichier de sortie spécifié.")
+    if same_file(input_path, output_path):
+        return StandardizeOutcome(
+            False,
+            "Le fichier de sortie est le fichier d'entrée : choisissez un autre "
+            "nom pour ne pas écraser l'original.",
+        )
     if enabled_names is not None and len(enabled_names) == 0:
         return StandardizeOutcome(False, "Aucune règle sélectionnée.")
 

@@ -57,7 +57,11 @@ conftest.py             Rend la racine du projet importable par pytest
 1. `docx_io.load` ouvre le document.
 2. `processor.build_registry` construit un `RuleRegistry` à partir de
    `available_rules()` (filtré par les règles activées).
-3. `processor.process_document` parcourt chaque paragraphe :
+3. `processor.process_document` parcourt chaque paragraphe du document via
+   `docx_io.iter_paragraphs` (corps, tableaux imbriqués, en-têtes / pieds de
+   page ; chacun une seule fois, cellules fusionnées et en-têtes liés ignorés).
+   `ParagraphReport.location` libelle les paragraphes hors corps ; `index` reste
+   la position dans le corps pour ceux du corps. Pour chaque paragraphe :
    - demande au registre les règles qui s'appliquent (`rules_for`) ;
    - applique les règles **en chaîne** (le `new_text` d'une règle alimente la
      suivante) ; chaque règle écrit son édition dans le paragraphe AVANT que la
@@ -73,6 +77,8 @@ conftest.py             Rend la racine du projet importable par pytest
      le `rPr` du run dominant de la portion remplacée (sans gras / italique /
      `vertAlign`). Son repli ne supprime jamais de texte.
 4. `docx_io.save` écrit le résultat ; un `ProcessingReport` est retourné.
+   `standardize_file` lève `ValueError` si la sortie est le fichier d'entrée
+   (`processor.same_file`) : l'original n'est jamais écrasé.
 
 `process_texts` fait la même chaîne **sans docx** (utile en test) : il n'applique
 pas les styles mais s'appuie sur `new_text`, qui est toujours le texte final
@@ -214,7 +220,11 @@ réutilisable plutôt que de dupliquer.
   chaque nouveau comportement ou correction de bug.
 - Ne pas ajouter de tests qui dépendent d'un vrai fichier `.docx` externe :
   privilégier `process_texts` et les tests par texte quand le docx n'est pas
-  nécessaire ; utiliser des documents construits en mémoire sinon.
+  nécessaire ; utiliser des documents construits en mémoire sinon. Seule
+  exception : `partie exp.docx`, document de démonstration **versionné**
+  volontairement à la racine, utilisé par quelques tests de bout en bout
+  (`test_docx_io`, `test_processor`, `test_ui_controller`). Ne pas le
+  supprimer ni le modifier ; ne pas en ajouter d'autre.
 - Les fichiers de sortie temporaires (`_tmp_*.docx`, `*_standardise.docx`) et
   `rules_config.json` sont ignorés par git : ne pas les committer.
 

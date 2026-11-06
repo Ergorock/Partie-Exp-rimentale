@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from typing import List
 
@@ -18,6 +19,14 @@ class ParagraphReport:
     original_text: str
     new_text: str
     actions: List[Action] = field(default_factory=list)
+    #: Emplacement lisible hors corps du texte (``'Tableau 1, ligne 2, …'``,
+    #: ``'En-tête (section 1), …'``). Vide pour un paragraphe du corps.
+    location: str = ""
+
+    @property
+    def label(self) -> str:
+        """Libellé affiché dans le rapport."""
+        return self.location or f"Paragraphe {self.index + 1}"
 
     @property
     def changed(self) -> bool:
@@ -51,7 +60,7 @@ class ProcessingReport:
             ActionKind.UNCHANGED: "CONFORME",
         }
         for pr in self.paragraphs:
-            lines.append(f"Paragraphe {pr.index + 1} :")
+            lines.append(f"{pr.label} :")
             for action in pr.actions:
                 label = kind_labels.get(action.kind, action.kind.value)
                 prefix = f"[{action.rule_name}] " if action.rule_name else ""
@@ -105,10 +114,13 @@ def process_document(document, registry: RuleRegistry) -> ProcessingReport:
     """Applique les règles à un document python-docx et réécrit les paragraphes.
 
     Modifie le document en place (le texte corrigé est écrit dans les
-    paragraphes concernés) et retourne le rapport des actions.
+    paragraphes concernés) et retourne le rapport des actions. Tous les
+    paragraphes sont traités : corps, tableaux (imbriqués compris), en-têtes
+    et pieds de page (voir ``docx_io.iter_paragraphs``). ``index`` reste la
+    position dans le corps pour les paragraphes du corps.
     """
     report = ProcessingReport()
-    for index, paragraph in enumerate(document.paragraphs):
+    for index, (location, paragraph) in enumerate(docx_io.iter_paragraphs(document)):
         text = paragraph.text
         rules = registry.rules_for(text)
         if not rules:
@@ -151,6 +163,7 @@ def process_document(document, registry: RuleRegistry) -> ProcessingReport:
                 original_text=text,
                 new_text=paragraph.text,
                 actions=actions,
+                location=location,
             )
         )
     return report
@@ -191,6 +204,17 @@ def build_default_registry() -> RuleRegistry:
     return build_registry(None)
 
 
+def same_file(path_a: str, path_b: str) -> bool:
+    """Vrai si les deux chemins désignent le même fichier (casse Windows, ``.``…)."""
+    try:
+        if os.path.exists(path_a) and os.path.exists(path_b):
+            return os.path.samefile(path_a, path_b)
+    except OSError:
+        pass
+    norm = lambda p: os.path.normcase(os.path.abspath(p))  # noqa: E731
+    return norm(path_a) == norm(path_b)
+
+
 def standardize_file(
     input_path: str,
     output_path: str,
@@ -205,7 +229,16 @@ def standardize_file(
 
     Returns:
         Le rapport des actions réalisées.
+
+    Raises:
+        ValueError: si ``output_path`` désigne le fichier d'entrée (on ne
+            l'écrase jamais : il reste la référence en cas d'erreur).
     """
+    if same_file(input_path, output_path):
+        raise ValueError(
+            "Le fichier de sortie est le fichier d'entrée : choisissez un autre "
+            "nom pour ne pas écraser l'original."
+        )
     document = docx_io.load(input_path)
     registry = build_registry(enabled_names)
     report = process_document(document, registry)
