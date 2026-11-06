@@ -42,6 +42,24 @@ def suggest_output_path(input_path: str) -> str:
     return f"{base}_standardise{ext or '.docx'}"
 
 
+def output_path_for_new_input(
+    previous_input: str, current_output: str, new_input: str
+) -> str:
+    """Chemin de sortie à afficher quand l'utilisateur choisit un fichier d'entrée.
+
+    Une sortie choisie pour un AUTRE fichier d'entrée n'a plus de sens : la
+    garder ferait écrire le résultat du nouveau fichier par-dessus celui du
+    précédent. On propose donc la sortie suggérée pour le nouveau fichier, sauf
+    dans deux cas où le choix de l'utilisateur est conservé :
+
+    - la sortie a été choisie avant tout fichier d'entrée ;
+    - le même fichier d'entrée est rechargé.
+    """
+    if current_output and (not previous_input or previous_input == new_input):
+        return current_output
+    return suggest_output_path(new_input)
+
+
 def run_standardization(
     input_path: str,
     output_path: str,

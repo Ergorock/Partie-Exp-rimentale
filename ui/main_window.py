@@ -20,7 +20,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ui.controller import list_rules, run_standardization, suggest_output_path
+from ui.controller import (
+    list_rules,
+    output_path_for_new_input,
+    run_standardization,
+    suggest_output_path,
+)
 
 
 class MainWindow(QMainWindow):
@@ -104,9 +109,11 @@ class MainWindow(QMainWindow):
             self, "Choisir un fichier .docx", "", "Documents Word (*.docx)"
         )
         if path:
+            previous = self.input_edit.text()
             self.input_edit.setText(path)
-            if not self.output_edit.text():
-                self.output_edit.setText(suggest_output_path(path))
+            self.output_edit.setText(
+                output_path_for_new_input(previous, self.output_edit.text(), path)
+            )
 
     def _choose_output(self) -> None:
         start = self.output_edit.text() or (

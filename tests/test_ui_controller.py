@@ -69,3 +69,30 @@ def test_run_standardization_with_1h_rule_enabled_corrects(tmp_path):
     assert outcome.success is True
     assert outcome.report is not None
     assert outcome.report.changed_count >= 1
+
+
+# --- Chemin de sortie quand l'entrée change ---
+
+from ui.controller import output_path_for_new_input  # noqa: E402
+
+
+def test_output_follows_new_input():
+    # A chargé puis B : la sortie suggérée pour A ne doit pas rester en place
+    # (B écraserait le résultat de A).
+    first = output_path_for_new_input("", "", "A.docx")
+    assert first == suggest_output_path("A.docx")
+    second = output_path_for_new_input("A.docx", first, "B.docx")
+    assert second == suggest_output_path("B.docx")
+
+
+def test_custom_output_for_previous_input_is_replaced():
+    out = output_path_for_new_input("A.docx", "mon_resultat_A.docx", "B.docx")
+    assert out == suggest_output_path("B.docx")
+
+
+def test_output_chosen_before_any_input_is_kept():
+    assert output_path_for_new_input("", "choisi.docx", "A.docx") == "choisi.docx"
+
+
+def test_same_input_reloaded_keeps_output():
+    assert output_path_for_new_input("A.docx", "perso.docx", "A.docx") == "perso.docx"

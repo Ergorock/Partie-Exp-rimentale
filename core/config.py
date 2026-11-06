@@ -150,12 +150,17 @@ def config_from_dict(data: dict) -> RmnConfig:
     )
 
 
-def load_config(path: Path = DEFAULT_CONFIG_PATH) -> RmnConfig:
+def load_config(path: Optional[Path] = None) -> RmnConfig:
     """Lit la configuration depuis ``path`` (JSON UTF-8).
+
+    Sans ``path``, lit ``DEFAULT_CONFIG_PATH`` tel qu'il vaut AU MOMENT DE
+    L'APPEL (et non à la définition de la fonction) : les tests peuvent ainsi
+    le rediriger vers un fichier temporaire.
 
     Renvoie ``RmnConfig()`` par défaut, SANS lever d'exception, si le fichier est
     absent, corrompu (JSON invalide) ou ne contient pas un objet JSON.
     """
+    path = path if path is not None else DEFAULT_CONFIG_PATH
     try:
         with open(path, "r", encoding="utf-8") as handle:
             data = json.load(handle)
@@ -166,8 +171,12 @@ def load_config(path: Path = DEFAULT_CONFIG_PATH) -> RmnConfig:
     return config_from_dict(data)
 
 
-def save_config(config: RmnConfig, path: Path = DEFAULT_CONFIG_PATH) -> None:
-    """Écrit la configuration dans ``path`` (JSON UTF-8, indenté)."""
+def save_config(config: RmnConfig, path: Optional[Path] = None) -> None:
+    """Écrit la configuration dans ``path`` (JSON UTF-8, indenté).
+
+    Sans ``path``, écrit dans ``DEFAULT_CONFIG_PATH`` résolu à l'appel.
+    """
+    path = path if path is not None else DEFAULT_CONFIG_PATH
     with open(path, "w", encoding="utf-8") as handle:
         json.dump(config_to_dict(config), handle, ensure_ascii=False, indent=2)
 

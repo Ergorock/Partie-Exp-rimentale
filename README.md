@@ -140,7 +140,9 @@ python app.py
 
 1. Cliquer sur **Charger…** et choisir le `.docx` à standardiser.
 2. Le fichier de sortie est proposé automatiquement (suffixe `_standardise`),
-   modifiable via **Parcourir…**.
+   modifiable via **Parcourir…**. Charger un autre fichier d'entrée remet la
+   sortie proposée pour ce nouveau fichier, pour ne jamais écraser le résultat
+   du précédent.
 3. Cliquer sur **Standardiser**.
 4. Lire le rapport des corrections dans la fenêtre ; le `.docx` corrigé est
    écrit à l'emplacement de sortie.

@@ -216,6 +216,11 @@ réutilisable plutôt que de dupliquer.
 ## 8. Tests et vérification
 
 - Lancer la suite : `python -m pytest` (depuis la racine).
+- `conftest.py` isole la configuration RMN (fixture `autouse`) : chaque test
+  part des défauts et `DEFAULT_CONFIG_PATH` pointe vers un dossier temporaire.
+  Le `rules_config.json` local n'est donc jamais lu ni écrit par les tests.
+  `load_config` / `save_config` résolvent ce chemin à l'appel : ne pas le figer
+  en argument par défaut.
 - Toute modification doit **garder la suite verte**. Ajouter des tests pour
   chaque nouveau comportement ou correction de bug.
 - Ne pas ajouter de tests qui dépendent d'un vrai fichier `.docx` externe :

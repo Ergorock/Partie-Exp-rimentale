@@ -138,3 +138,28 @@ def test_reset_forces_reload():
     reloaded = cfg.get_config()
     assert reloaded is not custom
     cfg.reset_config()
+
+
+# --- Chemin par défaut résolu à l'appel (isolation des tests, dialogue) ---
+
+def test_default_path_is_resolved_at_call_time(tmp_path, monkeypatch):
+    path = tmp_path / "prefs.json"
+    path.write_text('{"sort_order": "asc"}', encoding="utf-8")
+    monkeypatch.setattr(cfg, "DEFAULT_CONFIG_PATH", path)
+
+    assert cfg.load_config().sort_order == "asc"
+    cfg.reset_config()
+    assert cfg.get_config().sort_order == "asc"
+
+    cfg.save_config(RmnConfig(sort_order="none"))
+    assert cfg.load_config(path).sort_order == "none"
+    cfg.reset_config()
+
+
+def test_tests_never_read_project_config():
+    # Garde-fou : conftest.py redirige la config vers un fichier temporaire.
+    from pathlib import Path
+
+    project_file = Path(__file__).resolve().parent.parent / "rules_config.json"
+    assert cfg.DEFAULT_CONFIG_PATH != project_file
+    assert cfg.get_config() == RmnConfig()
