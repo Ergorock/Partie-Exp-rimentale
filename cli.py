@@ -21,7 +21,19 @@ def default_output_path(input_path: str) -> str:
     return f"{base}_standardise{ext}"
 
 
+def _force_utf8_stdout() -> None:
+    """Passe la sortie standard en UTF-8.
+
+    Le rapport contient δ, exposants et indices Unicode : sur une console
+    Windows (cp1252 par défaut), ``print`` lèverait ``UnicodeEncodeError``.
+    """
+    reconfigure = getattr(sys.stdout, "reconfigure", None)
+    if reconfigure is not None:
+        reconfigure(encoding="utf-8", errors="replace")
+
+
 def main(argv: list[str]) -> int:
+    _force_utf8_stdout()
     if len(argv) < 2:
         print("Usage : python cli.py <entrée.docx> [sortie.docx]")
         return 2

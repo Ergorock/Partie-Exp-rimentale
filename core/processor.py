@@ -115,39 +115,41 @@ def process_document(document, registry: RuleRegistry) -> ProcessingReport:
             continue
         current = text
         actions: List[Action] = []
-        # Éditions stylisées produites par les règles (chacune cible une
-        # sous-chaîne disjointe du paragraphe : voir FEAT-002). On les met de
-        # côté pour les appliquer via docx_io.apply_styled_edit.
-        styled_edits = []
+        # Chaque règle écrit son édition IMMÉDIATEMENT dans le paragraphe : la
+        # règle suivante reçoit ainsi un texte identique à celui du document,
+        # et son ``replaced_text`` y est retrouvable. Règles stylisées et non
+        # stylisées peuvent donc se mélanger sans perte.
         for rule in rules:
             result = rule.apply(current)
-            current = result.new_text
             actions.extend(result.actions)
             if result.is_styled:
-                styled_edits.append((result.replaced_text, result.segments))
-
-        if styled_edits:
-            # Les règles ciblent des sous-chaînes disjointes : on applique
-            # chaque édition stylisée une par une en recalculant old_text =
-            # paragraph.text avant chaque application (l'ordre n'introduit pas
-            # de conflit). Les éventuelles règles non-stylisées ont déjà écrit
-            # leur texte via new_text, reflété dans styled_edits/replaced_text.
-            for replaced_text, segments in styled_edits:
-                docx_io.apply_styled_edit(
+                ok = docx_io.apply_styled_edit(
                     paragraph,
-                    paragraph.text,
                     current,
-                    replaced_text,
-                    segments,
+                    result.new_text,
+                    result.replaced_text,
+                    result.segments,
                 )
-        elif current != text:
-            docx_io.apply_text_edit(paragraph, text, current)
+            else:
+                ok = docx_io.apply_text_edit(paragraph, current, result.new_text)
+            if not ok:
+                actions.append(
+                    Action(
+                        ActionKind.FLAGGED,
+                        "Structure Word non prise en charge (lien hypertexte, "
+                        "champ…) : paragraphe laissé inchangé, correction à "
+                        "faire à la main.",
+                        rule.name,
+                    )
+                )
+                break
+            current = result.new_text
 
         report.paragraphs.append(
             ParagraphReport(
                 index=index,
                 original_text=text,
-                new_text=current,
+                new_text=paragraph.text,
                 actions=actions,
             )
         )

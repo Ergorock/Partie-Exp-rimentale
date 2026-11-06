@@ -13,12 +13,16 @@ laissant intacts les runs environnants (et donc leur style).
 
 from __future__ import annotations
 
+from copy import deepcopy
 from difflib import SequenceMatcher
 from typing import TYPE_CHECKING, List, Optional
 
 from docx import Document
 from docx.document import Document as DocumentObject
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
 from docx.text.paragraph import Paragraph
+from docx.text.run import Run
 
 if TYPE_CHECKING:
     from core.rules.base import StyledSegment
@@ -78,7 +82,7 @@ def set_paragraph_text(paragraph: Paragraph, new_text: str) -> None:
         run.text = ""
 
 
-def apply_text_edit(paragraph: Paragraph, old_text: str, new_text: str) -> None:
+def apply_text_edit(paragraph: Paragraph, old_text: str, new_text: str) -> bool:
     """Applique une correction à un paragraphe en préservant la mise en forme.
 
     Au lieu de réécrire tout le texte dans un seul run (ce qui écrase gras,
@@ -93,21 +97,25 @@ def apply_text_edit(paragraph: Paragraph, old_text: str, new_text: str) -> None:
     conserve ainsi le style).
 
     Hypothèse : ``old_text`` correspond au texte courant du paragraphe. Si ce
-    n'est pas le cas, on retombe sur ``set_paragraph_text``.
+    n'est pas le cas, ou si du texte vit hors des runs directs (lien
+    hypertexte, champ…), le paragraphe n'est PAS modifié : un remplacement
+    aveugle risquerait de dupliquer ou de supprimer du texte.
 
     Args:
         paragraph: le paragraphe à modifier.
         old_text: le texte courant du paragraphe (avant correction).
         new_text: le texte corrigé.
+
+    Returns:
+        ``True`` si le paragraphe porte ``new_text`` après l'appel, ``False``
+        s'il n'a pas pu être modifié.
     """
     if old_text == new_text:
-        return
+        return True
 
     runs = paragraph.runs
-    if not runs or paragraph.text != old_text:
-        # Sécurité : structure inattendue -> remplacement simple.
-        set_paragraph_text(paragraph, new_text)
-        return
+    if paragraph.text != old_text or not runs_cover_text(paragraph):
+        return False
 
     # Texte cible par run (initialisé au texte d'origine de chaque run).
     run_texts: List[str] = [r.text for r in runs]
@@ -151,42 +159,123 @@ def apply_text_edit(paragraph: Paragraph, old_text: str, new_text: str) -> None:
 
     for run, text in zip(runs, new_run_texts):
         run.text = text
+    return True
 
 
-def _write_fragments(paragraph: Paragraph, fragments) -> None:
-    """Vide le paragraphe de ses runs puis écrit un run par fragment.
+# --------------------------------------------------------------------------- #
+# Édition stylisée
+# --------------------------------------------------------------------------- #
 
-    ``fragments`` est une liste de triplets ``(texte, bold, italic)`` où
-    ``bold`` / ``italic`` sont des états tri-valués (``True`` / ``False`` /
-    ``None``) écrits tels quels dans le run (préservation possible d'un style
-    d'origine). Un fragment au texte vide est ignoré.
+# Propriétés retirées du style de base des segments stylisés : la règle fixe
+# elle-même gras / italique, et les exposants / indices sont toujours écrits en
+# Unicode, jamais en superscript / subscript Word.
+_SEGMENT_STRIPPED_PROPS = ("w:b", "w:bCs", "w:i", "w:iCs", "w:vertAlign")
+
+
+def runs_cover_text(paragraph: Paragraph) -> bool:
+    """Vrai si les runs directs du paragraphe portent TOUT son texte.
+
+    Faux lorsque du texte vit hors des runs directs (lien hypertexte, champ,
+    contrôle de contenu…) : les positions calculées run par run ne
+    correspondraient plus au texte du paragraphe, on ne doit donc pas l'éditer.
     """
-    for run in list(paragraph.runs):
+    runs = paragraph.runs
+    return bool(runs) and "".join(r.text for r in runs) == paragraph.text
+
+
+def _run_starts(runs) -> List[int]:
+    """Position de début de chaque run dans le texte du paragraphe."""
+    starts: List[int] = []
+    pos = 0
+    for run in runs:
+        starts.append(pos)
+        pos += len(run.text)
+    return starts
+
+
+def _dominant_run(runs, start: int, end: int) -> Optional[Run]:
+    """Run qui couvre le plus de caractères de l'intervalle ``[start, end)``."""
+    best, best_overlap = None, -1
+    for run, run_start in zip(runs, _run_starts(runs)):
+        overlap = min(run_start + len(run.text), end) - max(run_start, start)
+        if overlap > best_overlap:
+            best, best_overlap = run, overlap
+    return best
+
+
+def _segment_rpr(base_run: Optional[Run]):
+    """Copie du ``rPr`` du run de base, sans gras / italique / exposant Word."""
+    if base_run is None or base_run._element.rPr is None:
+        return None
+    rpr = deepcopy(base_run._element.rPr)
+    for tag in _SEGMENT_STRIPPED_PROPS:
+        for element in rpr.findall(qn(tag)):
+            rpr.remove(element)
+    return rpr
+
+
+def _make_run(paragraph: Paragraph, text: str, rpr, style=None):
+    """Crée un élément ``w:r`` portant ``text`` et une copie de ``rpr``.
+
+    ``style`` vaut ``None`` (propriétés de ``rpr`` conservées telles quelles) ou
+    un couple ``(bold, italic)`` appliqué par-dessus.
+    """
+    element = OxmlElement("w:r")
+    if rpr is not None:
+        element.append(deepcopy(rpr))
+    run = Run(element, paragraph)
+    run.text = text
+    if style is not None:
+        run.bold, run.italic = style
+    return element
+
+
+def _segment_run(paragraph: Paragraph, segment: "StyledSegment", rpr):
+    """Run d'un segment stylisé : gras / italique posés seulement si demandés."""
+    style = (True if segment.bold else None, True if segment.italic else None)
+    return _make_run(paragraph, segment.text, rpr, style)
+
+
+def _replace_runs(paragraph: Paragraph, new_elements) -> None:
+    """Remplace les runs directs du paragraphe par ``new_elements``, à leur place.
+
+    Les nouveaux runs sont insérés avant le premier run d'origine : les autres
+    éléments du paragraphe (signets…) gardent leur position relative.
+    """
+    runs = paragraph.runs
+    anchor = runs[0]._element
+    for element in new_elements:
+        anchor.addprevious(element)
+    for run in runs:
         run._element.getparent().remove(run._element)
-    for text, bold, italic in fragments:
-        if not text:
-            continue
-        run = paragraph.add_run(text)
-        run.bold = bold
-        run.italic = italic
 
 
-def _rewrite_paragraph_with_segments(
-    paragraph: Paragraph, segments: List["StyledSegment"]
+def _rewrite_from_new_text(
+    paragraph: Paragraph, new_text: str, segments: List["StyledSegment"]
 ) -> None:
-    """Réécrit tout le paragraphe à partir de segments stylisés.
+    """Repli : réécrit tout le paragraphe à partir de ``new_text``.
 
-    Utilisé comme repli (fallback) quand la portion à remplacer est
-    introuvable ou que la structure est inattendue : on vide le paragraphe de
-    ses runs puis on ajoute un run par segment, en positionnant le gras et
-    l'italique. Le style des runs d'origine est perdu, mais la mise en forme
-    demandée par la règle (gras / italique) apparaît quand même.
+    Les segments stylisés sont localisés dans ``new_text`` ; le texte qui les
+    précède et les suit est écrit en clair avec le style du run dominant du
+    paragraphe. Si les segments sont introuvables, on retombe sur une édition
+    par diff (``apply_text_edit``) : la mise en forme demandée par la règle est
+    perdue, mais AUCUN texte n'est supprimé.
     """
-    fragments = [
-        (seg.text, True if seg.bold else None, True if seg.italic else None)
-        for seg in segments
-    ]
-    _write_fragments(paragraph, fragments)
+    seg_text = "".join(s.text for s in segments)
+    index = new_text.find(seg_text) if seg_text else -1
+    if index < 0:
+        apply_text_edit(paragraph, paragraph.text, new_text)
+        return
+    base = _dominant_run(paragraph.runs, 0, len(paragraph.text))
+    plain_rpr = base._element.rPr if base is not None else None
+    seg_rpr = _segment_rpr(base)
+    elements = []
+    if new_text[:index]:
+        elements.append(_make_run(paragraph, new_text[:index], plain_rpr))
+    elements.extend(_segment_run(paragraph, s, seg_rpr) for s in segments if s.text)
+    if new_text[index + len(seg_text):]:
+        elements.append(_make_run(paragraph, new_text[index + len(seg_text):], plain_rpr))
+    _replace_runs(paragraph, elements)
 
 
 def apply_styled_edit(
@@ -195,82 +284,66 @@ def apply_styled_edit(
     new_text: str,
     replaced_text: Optional[str],
     segments: List["StyledSegment"],
-) -> None:
+) -> bool:
     """Applique une édition stylisée : remplace une portion par des runs stylisés.
 
-    La sous-chaîne ``replaced_text`` (ou tout le texte du paragraphe si
-    ``replaced_text`` vaut ``None``) est remplacée par une suite de runs créés à
-    partir de ``segments`` (un run par ``StyledSegment``, avec ``run.bold`` /
-    ``run.italic`` positionnés). Les runs situés avant et après la portion
-    remplacée sont préservés lorsque c'est possible, afin de garder leur texte
-    et leur style.
+    La sous-chaîne ``replaced_text`` (ou tout le paragraphe si ``None``) est
+    remplacée par un run par ``StyledSegment``. Les runs situés avant et après
+    la portion sont conservés avec TOUTES leurs propriétés (police, taille,
+    couleur…). Les runs des segments reprennent les propriétés du run dominant
+    de la portion remplacée, sans gras / italique / exposant Word (fixés par la
+    règle ; exposants en Unicode).
 
-    Approche : on localise la portion ``[start, end)`` de ``replaced_text`` dans
-    ``old_text`` (``str.find``), on recalcule les bornes par run comme dans
-    ``apply_text_edit``, on vide la partie couverte par la portion puis on
-    insère les nouveaux runs stylisés à la bonne position dans le XML du
-    paragraphe.
-
-    Repli propre : si ``paragraph.text != old_text`` ou si ``replaced_text`` est
-    introuvable, on réécrit tout le paragraphe en runs stylisés
-    (``_rewrite_paragraph_with_segments``) de sorte que le gras / italique
-    apparaisse quand même.
+    Repli sans perte : si ``paragraph.text != old_text`` ou si
+    ``replaced_text`` est introuvable, le paragraphe est réécrit à partir de
+    ``new_text`` (voir ``_rewrite_from_new_text``).
 
     Args:
         paragraph: le paragraphe à modifier.
-        old_text: le texte courant du paragraphe (avant édition).
-        new_text: le texte final complet attendu du paragraphe (pour cohérence).
+        old_text: le texte attendu du paragraphe avant l'édition.
+        new_text: le texte final complet du paragraphe (vérité textuelle).
         replaced_text: la sous-chaîne exacte de ``old_text`` à remplacer, ou
             ``None`` pour remplacer tout le paragraphe.
         segments: les segments stylisés qui remplacent la portion.
+
+    Returns:
+        ``False`` (paragraphe NON modifié) si sa structure Word n'est pas prise
+        en charge (texte hors des runs directs), ``True`` sinon.
     """
+    if not runs_cover_text(paragraph):
+        return False
+
+    current = paragraph.text
+    if replaced_text is None:
+        start, end = 0, len(current)
+    else:
+        found = current == old_text and bool(replaced_text)
+        start = current.find(replaced_text) if found else -1
+        if start < 0:
+            _rewrite_from_new_text(paragraph, new_text, segments)
+            return True
+        end = start + len(replaced_text)
+
     runs = paragraph.runs
+    starts = _run_starts(runs)
+    seg_rpr = _segment_rpr(_dominant_run(runs, start, end))
 
-    # Cas de repli : structure inattendue ou remplacement global demandé.
-    if not runs or paragraph.text != old_text or replaced_text is None:
-        _rewrite_paragraph_with_segments(paragraph, segments)
-        return
-
-    start = old_text.find(replaced_text)
-    if start < 0 or not replaced_text:
-        _rewrite_paragraph_with_segments(paragraph, segments)
-        return
-    end = start + len(replaced_text)
-
-    # Bornes [début, fin) de chaque run dans le texte complet du paragraphe.
-    run_texts: List[str] = [r.text for r in runs]
-    starts: List[int] = []
-    pos = 0
-    for t in run_texts:
-        starts.append(pos)
-        pos += len(t)
-
-    # On reconstruit la liste ordonnée des fragments (texte + style) du nouveau
-    # paragraphe : partie AVANT la portion (style tri-valué d'origine préservé
-    # par run), puis les segments stylisés, puis partie APRÈS (style d'origine
-    # préservé). Chaque fragment est un triplet (texte, bold, italic).
-    fragments = []
-
-    for i, run in enumerate(runs):
-        run_start = starts[i]
-        run_end = starts[i] + len(run_texts[i])
-        before = run_texts[i][: max(0, min(run_end, start) - run_start)]
+    elements = []
+    # Partie AVANT la portion : copie conforme des runs (propriétés comprises).
+    for run, run_start in zip(runs, starts):
+        before = run.text[: max(0, min(run_start + len(run.text), start) - run_start)]
         if before:
-            fragments.append((before, run.bold, run.italic))
-
-    for seg in segments:
-        fragments.append(
-            (seg.text, True if seg.bold else None, True if seg.italic else None)
-        )
-
-    for i, run in enumerate(runs):
-        run_start = starts[i]
-        run_end = starts[i] + len(run_texts[i])
-        if run_end > end:
-            after = run_texts[i][max(0, end - run_start):]
+            elements.append(_make_run(paragraph, before, run._element.rPr))
+    # Portion remplacée : un run par segment stylisé.
+    elements.extend(_segment_run(paragraph, s, seg_rpr) for s in segments if s.text)
+    # Partie APRÈS la portion.
+    for run, run_start in zip(runs, starts):
+        if run_start + len(run.text) > end:
+            after = run.text[max(0, end - run_start):]
             if after:
-                fragments.append((after, run.bold, run.italic))
+                elements.append(_make_run(paragraph, after, run._element.rPr))
 
-    _write_fragments(paragraph, fragments)
+    _replace_runs(paragraph, elements)
+    return True
 
-    _ = new_text  # new_text est la vérité textuelle complète (voir RuleResult).
+

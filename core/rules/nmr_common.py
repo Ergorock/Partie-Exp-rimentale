@@ -27,7 +27,7 @@ Conventions de décision utilisateur appliquées ici :
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
 from core.config import RmnConfig, get_config
@@ -191,18 +191,34 @@ def _normalize_frequency(freq: str) -> Tuple[str, bool]:
     return freq, freq != original.strip()
 
 
+# Unité de température explicitement écrite dans l'entrée.
+_CELSIUS_RE = re.compile(r"[°º˚]\s*C|\d\s*C\b", re.IGNORECASE)  # °C, ºC, ˚C, 25C
+_KELVIN_RE = re.compile(r"\d\s*K\b|\bK\b", re.IGNORECASE)
+
+
+def temperature_unit_of(temp: str) -> Optional[str]:
+    """Retourne l'unité écrite dans l'élément température (``'K'`` / ``'°C'``), ou None."""
+    if _CELSIUS_RE.search(temp):
+        return "°C"
+    if _KELVIN_RE.search(temp):
+        return "K"
+    return None
+
+
 def _normalize_temperature(
     temp: str, config: Optional[RmnConfig] = None
 ) -> Tuple[str, bool]:
     """Normalise l'élément température vers ``<nombre> <unité>``.
 
-    L'unité est lue dans la configuration (``config.temperature_unit``) sans
-    convertir la valeur numérique.
+    L'unité est lue dans la configuration (``config.temperature_unit``). La
+    valeur numérique (signe compris) n'est jamais convertie : l'appelant doit
+    vérifier au préalable que l'unité éventuellement écrite dans l'entrée est
+    bien l'unité configurée (voir ``normalize_parenthesis``).
     """
     config = config or get_config()
     original = temp
     temp = temp.strip()
-    number = re.search(r"\d+(?:\.\d+)?", temp)
+    number = re.search(r"-?\d+(?:\.\d+)?", temp)
     if not number:
         return temp, False
     normalized = f"{number.group()} {config.temperature_unit}"
@@ -256,6 +272,21 @@ def normalize_parenthesis(
         if not re.search(r"\d+(?:\.\d+)?", elements[2]):
             elements[2] = config.temperature_placeholder
             actions.append(("placeholder", "Température illisible : marqueur inséré."))
+        elif (
+            temperature_unit_of(elements[2]) is not None
+            and temperature_unit_of(elements[2]) != config.temperature_unit
+        ):
+            # Unité écrite différente de l'unité configurée : on ne réétiquette
+            # pas la valeur (ce serait une donnée fausse) et on ne convertit pas.
+            actions.append(
+                (
+                    "flagged",
+                    f"Température '{elements[2]}' exprimée en "
+                    f"{temperature_unit_of(elements[2])} alors que l'unité configurée "
+                    f"est {config.temperature_unit} : laissée telle quelle, "
+                    "vérification manuelle requise.",
+                )
+            )
         else:
             new_temp, changed = _normalize_temperature(elements[2], config)
             if changed:
@@ -299,30 +330,40 @@ def split_delta_body(after_paren: str) -> Optional[str]:
     ``': ẟ (ppm) = 9.18 (dd, …), 8.90 (m, 2H)'``). Retourne le corps brut des
     signaux (après le delta), ou ``None`` si aucun delta n'est trouvé.
     """
+    located = locate_delta(after_paren)
+    return None if located is None else located[1]
+
+
+# Texte toléré entre la parenthèse de section et le delta (ponctuation seule).
+_BEFORE_DELTA_RE = re.compile(r"[\s:;,.=\-–]*")
+
+
+def locate_delta(after_paren: str) -> Optional[Tuple[str, str]]:
+    """Localise le delta : retourne ``(texte_avant_delta, corps_des_signaux)``.
+
+    Retourne ``None`` si aucun delta n'est trouvé.
+    """
     match = _DELTA_RE.search(after_paren)
     if not match:
         return None
-    return match.group("body").strip()
+    return after_paren[: match.start()], match.group("body").strip()
+
+
+def is_punctuation_only(text: str) -> bool:
+    """Vrai si ``text`` ne contient que des espaces / ponctuation (``': '``…)."""
+    return bool(_BEFORE_DELTA_RE.fullmatch(text))
 
 
 # --------------------------------------------------------------------------- #
 # Parsing / tri / formatage des signaux
 # --------------------------------------------------------------------------- #
 
-# Multiplicités autorisées (ordre important : les plus longues d'abord pour le
-# matching). 'bs' est accepté en entrée et normalisé en 'br s'.
-_MULTIPLICITIES = {
-    "br s": "br s",
-    "bs": "br s",
-    "dd": "dd",
-    "quint": "quint",
-    "septic": "septic",
-    "s": "s",
-    "d": "d",
-    "t": "t",
-    "q": "q",
-    "m": "m",
-}
+# Champ qui ressemble à une multiplicité (td, dt, ddd, dq, sext…) sans figurer
+# dans la table configurée : on ne sait pas l'interpréter, le signal devient
+# non parsable (l'utilisateur peut l'ajouter dans les paramètres).
+_MULTIPLICITY_LIKE_RE = re.compile(
+    r"(?:br\.?\s*)?(?:[sdtqm]+|quint(?:et)?|sext(?:et)?|sept(?:et)?|hept(?:et)?|septic)"
+)
 
 
 @dataclass
@@ -332,7 +373,8 @@ class Signal:
     shift: str  # déplacement chimique : valeur unique OU plage 'a-b'
     shift_high: float  # borne haute numérique (pour le tri)
     multiplicity: Optional[str] = None  # normalisée (None pour le 13C simple)
-    j: Optional[str] = None  # constante de couplage brute (ex '4.7')
+    j: Optional[str] = None  # constante(s) de couplage brute(s) (ex '4.7' ou '8.4, 2.1')
+    extra_j: List[str] = field(default_factory=list)  # champs 'J = … Hz' suivants
     integration: Optional[str] = None  # ex '2H'
     attribution: Optional[str] = None  # texte libre (attribution)
 
@@ -367,11 +409,40 @@ def _split_top_level(body: str) -> List[str]:
 # Déplacement chimique : valeur unique ou plage 'a-b' / 'a–b'.
 _SHIFT_RE = re.compile(r"^\s*(-?\d+(?:\.\d+)?)(?:\s*[-\u2013]\s*(-?\d+(?:\.\d+)?))?")
 
-# Contenu optionnel entre parenthèses à la fin d'un signal.
-_PAREN_RE = re.compile(r"\(([^)]*)\)\s*$")
+# Après le déplacement, un signal ne peut contenir qu'une parenthèse simple
+# (sans parenthèse imbriquée) et rien d'autre : c'est la condition pour pouvoir
+# le reconstruire sans perte.
+_PAREN_RE = re.compile(r"\(([^()]*)\)")
+
+# Virgule décimale (ex. '7,26') : rend le découpage sur les virgules ambigu.
+_DECIMAL_COMMA_RE = re.compile(r"\d,\d")
+
+# Ponctuation terminale de la liste des signaux (ex. point final).
+_TRAILING_PUNCT_RE = re.compile(r"\s*([.;])\s*$")
+
+
+def split_trailing_punctuation(body: str) -> Tuple[str, str]:
+    """Sépare la ponctuation finale (``.`` ou ``;``) de la liste des signaux.
+
+    Exemple : ``'7.26 (s, 1H).'`` -> ``('7.26 (s, 1H)', '.')``. La ponctuation
+    est réinsérée telle quelle après les signaux reformatés.
+    """
+    match = _TRAILING_PUNCT_RE.search(body)
+    if not match:
+        return body, ""
+    return body[: match.start()], match.group(1)
 
 # Constante de couplage dans un contenu de parenthèse.
-_J_RE = re.compile(r"J\s*=\s*(-?\d+(?:\.\d+)?)\s*Hz", re.IGNORECASE)
+# Une ou plusieurs valeurs : 'J = 4.7 Hz' ou 'J = 8.4, 2.1 Hz'.
+_J_RE = re.compile(
+    r"J\s*=\s*(-?\d+(?:\.\d+)?(?:\s*,\s*-?\d+(?:\.\d+)?)*)\s*Hz", re.IGNORECASE
+)
+
+# Marqueur provisoire d'une constante de couplage extraite avant le découpage
+# des champs sur les virgules (les virgules de 'J = 8.4, 2.1 Hz' ne séparent
+# pas des champs).
+_J_TOKEN = "\x00J{}\x00"
+_J_TOKEN_RE = re.compile(r"\x00J(\d+)\x00")
 
 # Intégration (ex '2H', '1H', '3F').
 _INTEG_RE = re.compile(r"\b(\d+\s*[A-Za-z])\b")
@@ -396,12 +467,15 @@ def parse_signals(
 
     Returns:
         ``(signaux, all_parsable)`` où ``all_parsable`` est ``False`` dès qu'un
-        signal n'a pas pu être parsé proprement (déplacement illisible).
+        signal ne peut pas être reconstruit sans perte : déplacement illisible,
+        texte en dehors de la parenthèse, parenthèse imbriquée, ou virgule
+        décimale dans la liste (découpage ambigu). Dans ce cas l'appelant ne
+        doit pas réécrire la liste.
     """
     config = config or get_config()
     raw_signals = _split_top_level(body)
     signals: List[Signal] = []
-    all_parsable = bool(raw_signals)
+    all_parsable = bool(raw_signals) and not _DECIMAL_COMMA_RE.search(body)
 
     for raw in raw_signals:
         shift_match = _SHIFT_RE.match(raw)
@@ -425,24 +499,60 @@ def parse_signals(
         integration = None
         attribution = None
 
-        paren_match = _PAREN_RE.search(rest)
+        paren_match = _PAREN_RE.fullmatch(rest) if rest else None
+        if rest and not paren_match:
+            # Texte hors parenthèse ou parenthèse imbriquée : on ne saurait
+            # pas le reconstruire, on garde le signal brut.
+            all_parsable = False
+            signals.append(Signal(shift=raw, shift_high=float("-inf")))
+            continue
+        extra_j: List[str] = []
+        lossless = True
         if paren_match:
-            inner = paren_match.group(1)
+            # Les constantes de couplage sont extraites AVANT le découpage
+            # (leurs virgules internes ne séparent pas des champs).
+            j_values: List[str] = []
+
+            def _stash_j(match: re.Match) -> str:
+                j_values.append(re.sub(r"\s*,\s*", ", ", match.group(1)))
+                return _J_TOKEN.format(len(j_values) - 1)
+
+            inner = _J_RE.sub(_stash_j, paren_match.group(1))
             fields = [f.strip() for f in inner.split(",")]
             remaining_fields: List[str] = []
-            for field in fields:
-                mult = _parse_multiplicity(field, config)
-                jm = _J_RE.search(field)
+            for fld in fields:
+                mult = _parse_multiplicity(fld, config)
+                j_token = _J_TOKEN_RE.fullmatch(fld)
                 if mult and multiplicity is None:
+                    recognized = True
                     multiplicity = mult
-                elif jm and j is None:
-                    j = jm.group(1)
-                elif integration is None and _INTEG_RE.fullmatch(field.replace(" ", "")):
-                    integration = field.replace(" ", "")
+                elif j_token:
+                    recognized = True
+                    value = j_values[int(j_token.group(1))]
+                    if j is None:
+                        j = value
+                    else:
+                        extra_j.append(value)
+                elif integration is None and _INTEG_RE.fullmatch(fld.replace(" ", "")):
+                    recognized = True
+                    integration = fld.replace(" ", "")
                 else:
-                    remaining_fields.append(field)
+                    recognized = False
+                    if _J_TOKEN_RE.search(fld) or _MULTIPLICITY_LIKE_RE.fullmatch(fld):
+                        # J mêlée à du texte, ou multiplicité hors table (td…).
+                        lossless = False
+                    remaining_fields.append(fld)
+                if recognized and remaining_fields:
+                    # Un champ inconnu précède un champ reconnu : la sortie
+                    # (multiplicité, J, intégration, attribution) le déplacerait.
+                    lossless = False
             if remaining_fields:
                 attribution = ", ".join(remaining_fields)
+
+        if not lossless:
+            all_parsable = False
+            signals.append(Signal(shift=raw, shift_high=float("-inf")))
+            continue
 
         signals.append(
             Signal(
@@ -450,6 +560,7 @@ def parse_signals(
                 shift_high=shift_high,
                 multiplicity=multiplicity,
                 j=j,
+                extra_j=extra_j,
                 integration=integration,
                 attribution=attribution,
             )
@@ -480,13 +591,18 @@ def sort_signals(
     return sorted(signals, key=lambda s: s.shift_high, reverse=reverse)
 
 
+def _format_j(signal: Signal) -> List[str]:
+    """Champs 'J = … Hz' d'un signal, dans l'ordre d'entrée."""
+    values = ([signal.j] if signal.j else []) + list(signal.extra_j)
+    return [f"J = {value} Hz" for value in values]
+
+
 def format_signal_1h(signal: Signal) -> str:
     """Formate un signal 1H : déplacement, multiplicité, J, intégration, attribution."""
     parts: List[str] = []
     if signal.multiplicity:
         parts.append(signal.multiplicity)
-    if signal.j:
-        parts.append(f"J = {signal.j} Hz")
+    parts.extend(_format_j(signal))
     if signal.integration:
         parts.append(signal.integration)
     if signal.attribution:
@@ -497,15 +613,17 @@ def format_signal_1h(signal: Signal) -> str:
 
 
 def format_signal_13c(signal: Signal) -> str:
-    """Formate un signal 13C : déplacement (+ attribution / J entre parenthèses).
+    """Formate un signal 13C : déplacement (+ multiplicité / J / attribution).
 
     Le carbone est généralement découplé (singulet) : on indique le déplacement
-    puis l'attribution optionnelle entre parenthèses. La constante ``J`` est
-    conservée si un couplage est présent (ex. couplage F/P).
+    puis l'attribution optionnelle entre parenthèses. La multiplicité et la
+    constante ``J`` sont conservées si un couplage est présent (ex. ``d`` pour
+    un couplage C–F).
     """
     parts: List[str] = []
-    if signal.j:
-        parts.append(f"J = {signal.j} Hz")
+    if signal.multiplicity:
+        parts.append(signal.multiplicity)
+    parts.extend(_format_j(signal))
     if signal.integration:
         parts.append(signal.integration)
     if signal.attribution:

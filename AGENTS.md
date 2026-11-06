@@ -39,8 +39,9 @@ core/                   Cœur de traitement, SANS aucune dépendance à Qt
     base.py             Interface Rule + Action / RuleResult / StyledSegment
     registry.py         Registre ordonné des règles
     nmr_common.py       Helpers RMN partagés (Unicode, parenthèse, signaux, tri)
-    nmr_1h.py           Règle 1H NMR (sortie stylisée)
-    nmr_13c.py          Règle 13C NMR (sortie stylisée)
+    nmr_section.py      Base NmrSectionRule (localisation, parenthèse, δ, signaux)
+    nmr_1h.py           Règle 1H NMR (noyau + formatage d'un signal)
+    nmr_13c.py          Règle 13C NMR (noyau + formatage d'un signal)
 ui/                     Interface, SEULE couche qui importe PySide6
   controller.py         Logique applicative testable (sans Qt)
   main_window.py        Fenêtre principale
@@ -59,10 +60,18 @@ conftest.py             Rend la racine du projet importable par pytest
 3. `processor.process_document` parcourt chaque paragraphe :
    - demande au registre les règles qui s'appliquent (`rules_for`) ;
    - applique les règles **en chaîne** (le `new_text` d'une règle alimente la
-     suivante) ;
+     suivante) ; chaque règle écrit son édition dans le paragraphe AVANT que la
+     suivante ne s'applique, de sorte que texte du document et texte chaîné
+     restent identiques ;
    - si une règle renvoie une sortie **stylisée** (`segments`), l'édition passe
      par `docx_io.apply_styled_edit` ; sinon par `docx_io.apply_text_edit`
-     (édition par diff qui préserve la mise en forme voisine).
+     (édition par diff qui préserve la mise en forme voisine) ;
+   - les deux renvoient `False` sans rien modifier si le texte n'est pas
+     entièrement porté par des runs directs (lien hypertexte, champ…) : le
+     processor ajoute alors un `FLAGGED` et arrête la chaîne pour ce paragraphe.
+   - `apply_styled_edit` copie le `rPr` des runs conservés et donne aux segments
+     le `rPr` du run dominant de la portion remplacée (sans gras / italique /
+     `vertAlign`). Son repli ne supprime jamais de texte.
 4. `docx_io.save` écrit le résultat ; un `ProcessingReport` est retourné.
 
 `process_texts` fait la même chaîne **sans docx** (utile en test) : il n'applique
@@ -100,7 +109,11 @@ Une règle hérite de `core.rules.base.Rule` et implémente :
   (retourner `UNCHANGED`). Les règles RMN le garantissent déjà.
 - Traitement **par segment de section** : un paragraphe peut contenir plusieurs
   sections RMN collées (`1H NMR … 13C NMR …`). Une règle ne reformate QUE son
-  segment (voir `nmr_common.section_span`) et laisse le reste intact.
+  segment (voir `nmr_common.section_span`) et laisse le reste intact. Elle
+  trouve son label n'importe où dans le paragraphe (`NmrSectionRule._find_label`) :
+  hors tête de paragraphe, le label doit être suivi d'une parenthèse avec
+  seulement ponctuation/fréquence entre les deux. Préfixe, suffixe et
+  `replaced_text` sont pris dans le texte ORIGINAL (espaces insécables compris).
 
 ---
 
@@ -121,16 +134,30 @@ tests.
   Corrections : espace avant `MHz`, unité `MHz`/`K` ajoutée, indices sur le
   solvant, fréquence écrite hors parenthèse déplacée à l'intérieur. Température
   absente/illisible → marqueur `[??? K]` (configurable). Parenthèse trop
-  incomplète → `FLAGGED` sans correction.
+  incomplète → `FLAGGED` sans correction. Température écrite dans une unité
+  différente de l'unité configurée → laissée telle quelle + `FLAGGED` (jamais
+  réétiquetée ni convertie).
 - **δ en italique** ; variantes d'entrée (`δ`, `ẟ`, `(ppm) =`) normalisées.
 - **Label + parenthèse en gras** (configurable).
 - **Tri des signaux** du plus grand au plus petit (configurable : `desc` /
   `asc` / `none`), **mais règle de sûreté** : si un seul signal n'est pas
-  parsable, AUCUN réordonnancement et une action `FLAGGED` est émise. On ne
-  réécrit jamais une chimie qu'on n'a pas comprise, et on n'invente aucune
-  donnée.
+  parsable, la liste des signaux est conservée TELLE QUELLE (ni tri ni
+  reformatage) et une action `FLAGGED` est émise. On ne réécrit jamais une
+  chimie qu'on n'a pas comprise, et on n'invente aucune donnée.
+- **Parsable = reconstructible sans perte** : déplacement suivi au plus d'une
+  parenthèse simple. Texte hors parenthèse, parenthèse imbriquée ou virgule
+  décimale (`\d,\d`) rendent la liste non parsable. La ponctuation finale
+  (`.`/`;`) est retirée avant analyse puis réinsérée. Couverts par
+  `tests/test_data_safety.py`.
+- **13C** : la multiplicité (ex. `d` d'un couplage C–F) est conservée en sortie.
 - Multiplicités `1H` autorisées : `s, d, t, q, quint, septic, m, dd, br s` ;
-  `bs` en entrée → `br s` (table configurable).
+  `bs` en entrée → `br s` (table configurable). Une multiplicité hors table
+  (`td`, `dt`…) ou un champ inconnu AVANT un champ reconnu → signal non
+  parsable. `J = 8.4, 2.1 Hz` et `J = 8.4 Hz, J = 2.1 Hz` sont reconnus.
+- **Aucun texte supprimé autour de la section** : texte inconnu entre label et
+  parenthèse → `FLAGGED` sans modification ; δ absent ou précédé d'un texte
+  inconnu → parenthèse normalisée, suite conservée telle quelle, `FLAGGED`
+  (aucun δ ajouté). Couvert par `tests/test_sections_and_formatting.py`.
 
 ---
 
@@ -166,7 +193,9 @@ le comportement actuel, l'intégrer à `config_to_dict` / `config_from_dict`
 
 1. Créer `core/rules/hrms.py` héritant de `Rule` (`name`, `description`,
    `applies`, `apply`). Pour une sortie stylisée, renseigner `segments` et
-   `replaced_text` dans le `RuleResult` (voir `nmr_1h.py`).
+   `replaced_text` dans le `RuleResult` (voir `nmr_section.py`). Pour une
+   nouvelle section RMN (ex. `19F NMR`), hériter de `NmrSectionRule` et fixer
+   seulement `name`, `description`, `nucleus` et `format_signal`.
 2. L'ajouter à `available_rules()` dans `core/processor.py`. C'est le **catalogue
    central** : toute règle qui y figure apparaît automatiquement dans le CLI et
    l'UI, sans autre modification.
