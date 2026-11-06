@@ -17,3 +17,6 @@ env/
 # Fichiers de sortie temporaires
 _tmp_*.docx
 *_standardise.docx
+
+# Préférences locales (écrites par l'UI)
+rules_config.json

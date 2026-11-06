@@ -116,6 +116,36 @@ python app.py
 4. Lire le rapport des corrections dans la fenêtre ; le `.docx` corrigé est
    écrit à l'emplacement de sortie.
 
+### Paramètres
+
+La fenêtre principale expose un bouton **Paramètres** qui ouvre un dialogue
+modal pour ajuster le comportement des règles RMN sans encombrer l'interface
+principale. Paramètres éditables :
+
+- **Multiplicités reconnues** : table des correspondances entrée → normalisée
+  (par exemple `bs` → `br s`). Les boutons **Ajouter** et **Retirer** gèrent les
+  lignes ; une ligne dont l'entrée est vide est ignorée, et une valeur
+  normalisée vide reprend l'entrée comme valeur.
+- **Marqueur de donnée manquante** : texte inséré lorsqu'une température est
+  absente ou illisible (défaut `[??? K]`).
+- **Sens du tri des signaux** : décroissant (défaut), croissant ou aucun tri.
+- **Label et parenthèse en gras** et **symbole δ en italique** : activent ou
+  désactivent ces styles.
+- **Unité de température** : `K` ou `°C`. Seule l'unité affichée change, le
+  nombre n'est pas converti.
+
+Les trois boutons :
+
+- **OK** écrit les paramètres dans `rules_config.json` et les applique
+  immédiatement ;
+- **Annuler** ferme le dialogue sans rien écrire ni modifier ;
+- **Réinitialiser** remet les champs aux valeurs par défaut dans le dialogue,
+  sans rien écrire tant qu'OK n'a pas été validé.
+
+Les préférences sont enregistrées dans `rules_config.json` à la racine du
+projet. Ce fichier **n'est pas versionné** (il figure dans `.gitignore`) et il
+est automatiquement recréé aux valeurs par défaut s'il est absent ou corrompu.
+
 ### Ligne de commande
 
 ```powershell

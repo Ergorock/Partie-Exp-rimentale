@@ -78,6 +78,11 @@ class MainWindow(QMainWindow):
             self.rule_checkboxes[info.name] = cb
         layout.addWidget(rules_box)
 
+        # --- Bouton Paramètres ---
+        self.settings_button = QPushButton("Paramètres")
+        self.settings_button.clicked.connect(self._open_settings)
+        layout.addWidget(self.settings_button)
+
         # --- Bouton Standardiser ---
         self.run_button = QPushButton("Standardiser")
         self.run_button.setMinimumHeight(40)
@@ -114,6 +119,13 @@ class MainWindow(QMainWindow):
             if not path.lower().endswith(".docx"):
                 path += ".docx"
             self.output_edit.setText(path)
+
+    def _open_settings(self) -> None:
+        # Import local pour éviter tout import circulaire au chargement du module.
+        from ui.settings_dialog import SettingsDialog
+
+        dialog = SettingsDialog(self)
+        dialog.exec()
 
     def _selected_rule_names(self) -> set[str]:
         """Noms des règles cochées dans l'interface."""
