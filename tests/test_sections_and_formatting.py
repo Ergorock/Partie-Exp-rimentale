@@ -168,7 +168,7 @@ def test_prose_between_label_and_parenthesis_is_not_dropped():
 # --- Multiplicités inconnues et J multiples -----------------------------------
 
 def test_unknown_multiplicity_is_flagged_and_kept():
-    body = "7.26 (td, J = 7.5 Hz, 1H), 1.20 (t, 3H)"
+    body = "7.26 (ddq, J = 7.5 Hz, 1H), 1.20 (t, 3H)"
     result = RULE_1H.apply(f"1H NMR (400 MHz, CDCl3, 298 K) δ {body}")
     assert result.new_text.endswith(f"δ {body}")
     assert _flagged(result)

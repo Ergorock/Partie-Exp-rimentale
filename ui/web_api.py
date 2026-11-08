@@ -20,9 +20,11 @@ from typing import List, Optional
 from core import config as config_module
 from core.config import config_from_dict, config_to_dict, get_config, set_config
 from ui.controller import (
+    evaluation_to_dict,
     list_rules,
     output_path_for_new_input,
     report_to_dict,
+    run_evaluation,
     run_standardization,
 )
 
@@ -146,6 +148,15 @@ class Api:
             "message": outcome.message,
             "output_path": outcome.output_path,
             "report": report_to_dict(outcome.report) if outcome.report else None,
+        }
+
+    def evaluate(self, input_path: str, enabled: List[str]) -> dict:
+        """Évalue le document sans l'écrire : score, note et écarts."""
+        outcome = run_evaluation(input_path, set(enabled))
+        return {
+            "success": outcome.success,
+            "message": outcome.message,
+            "evaluation": evaluation_to_dict(outcome.report) if outcome.report else None,
         }
 
     def open_output(self, path: str) -> bool:

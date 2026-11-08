@@ -45,12 +45,13 @@
       </section>
 
       <button type="button" class="primary" id="run" disabled>Standardiser</button>
+      <button type="button" id="evaluate" disabled>Évaluer sans modifier</button>
       <p class="error" id="error" role="alert" hidden></p>
     </aside>
 
     <section class="results" aria-live="polite">
       <div class="empty" id="empty">
-        <p>Les lignes RMN corrigées s'afficheront ici, avec ce qui reste à vérifier.</p>
+        <p>Les lignes RMN corrigées s'afficheront ici, avec ce qui reste à vérifier. « Évaluer » note le document sans le modifier.</p>
       </div>
 
       <div id="report" hidden>
@@ -67,6 +68,30 @@
         </div>
         <ol class="entries" id="entries"></ol>
       </div>
+
+      <div id="evaluation" hidden>
+        <p class="eval-kicker">Évaluation du document · aucun fichier modifié</p>
+        <p class="eval-score"><span id="eval-score"></span> <span class="eval-grade" id="eval-grade"></span></p>
+        <p class="subline" id="eval-subline"></p>
+        <div class="gauge" id="eval-gauge" aria-hidden="true">
+          <div class="gauge-fill" id="eval-fill"></div>
+        </div>
+
+        <section class="eval-block" id="eval-rules-block">
+          <h3>Par règle</h3>
+          <table class="eval-rules"><tbody id="eval-rules"></tbody></table>
+        </section>
+
+        <section class="eval-block" id="eval-issues-block">
+          <h3>Règles non respectées</h3>
+          <ul class="issues" id="eval-issues"></ul>
+        </section>
+
+        <section class="eval-block" id="eval-items-block">
+          <h3>Sections non conformes</h3>
+          <ol class="entries" id="eval-items"></ol>
+        </section>
+      </div>
     </section>
   </main>
 
@@ -76,7 +101,7 @@
 
       <fieldset>
         <legend>Multiplicités reconnues</legend>
-        <p class="hint">À gauche ce qui est écrit dans le document, à droite ce qui sera écrit à la place. Une multiplicité absente de cette liste (td, dt…) est signalée sans être modifiée.</p>
+        <p class="hint">À gauche ce qui est écrit dans le document, à droite ce qui sera écrit à la place. Une multiplicité absente de cette liste (ddq…) est signalée sans être modifiée.</p>
         <div class="mult-scroll">
           <table class="mult">
             <thead><tr><th scope="col">Écrit</th><th scope="col">Devient</th><th><span class="sr">Retirer</span></th></tr></thead>
@@ -104,10 +129,28 @@
         <label for="placeholder">Marqueur de température manquante</label>
         <input type="text" id="placeholder" spellcheck="false">
 
+        <label for="hrms-ppm">Écart HRMS toléré (ppm)</label>
+        <input type="number" id="hrms-ppm" min="0.1" step="0.1">
+
         <span></span>
         <label class="check"><input type="checkbox" id="bold-label"><span>Label et parenthèse en gras</span></label>
         <span></span>
         <label class="check"><input type="checkbox" id="italic-delta"><span>δ en italique</span></label>
+        <span></span>
+        <label class="check"><input type="checkbox" id="italic-j"><span>J en italique</span></label>
+      </fieldset>
+
+      <fieldset class="grid">
+        <legend>Évaluation</legend>
+        <p class="hint span">Note obtenue selon le pourcentage de sections déjà conformes. Seuils décroissants entre 0 et 100 ; en dessous de « Correct », la note est « Mauvais ».</p>
+        <label for="th-parfait">Parfait à partir de (%)</label>
+        <input type="number" id="th-parfait" min="0" max="100" step="1">
+        <label for="th-tres_bon">Très bon à partir de (%)</label>
+        <input type="number" id="th-tres_bon" min="0" max="100" step="1">
+        <label for="th-bon">Bon à partir de (%)</label>
+        <input type="number" id="th-bon" min="0" max="100" step="1">
+        <label for="th-correct">Correct à partir de (%)</label>
+        <input type="number" id="th-correct" min="0" max="100" step="1">
       </fieldset>
 
       <div class="dialog-actions">

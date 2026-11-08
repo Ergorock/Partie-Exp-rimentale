@@ -18,7 +18,8 @@ from core.config import RmnConfig
 
 def test_defaults_match_current_behaviour():
     c = RmnConfig()
-    assert c.multiplicities == {
+    # Entrées historiques toujours présentes, avec la même sortie.
+    historic = {
         "br s": "br s",
         "bs": "br s",
         "dd": "dd",
@@ -30,6 +31,15 @@ def test_defaults_match_current_behaviour():
         "q": "q",
         "m": "m",
     }
+    assert historic.items() <= c.multiplicities.items()
+    # Multiplicités composées, larges et apparentes ajoutées.
+    for key, value in {
+        "td": "td", "dt": "dt", "ddd": "ddd", "qd": "qd", "sext": "sext",
+        "sept": "sept", "br d": "br d", "br. s": "br s", "bd": "br d",
+        "app t": "app t",
+    }.items():
+        assert c.multiplicities[key] == value
+    assert c.italic_j is True
     assert c.temperature_placeholder == "[??? K]"
     assert c.sort_order == "desc"
     assert c.bold_label is True

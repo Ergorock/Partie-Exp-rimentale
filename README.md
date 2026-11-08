@@ -4,7 +4,8 @@ Outil pour standardiser le formatage d'une partie expérimentale contenue dans
 un fichier Word (`.docx`). On charge un `.docx` mal formaté et on récupère un
 `.docx` corrigé, accompagné d'un rapport des corrections.
 
-Deux règles RMN sont disponibles : `1H NMR` et `13C NMR`, qui produisent une
+Quatre règles RMN (`1H NMR`, `13C NMR`, `19F NMR`, `31P NMR`) et une règle
+`HRMS` sont disponibles ; elles produisent une
 sortie **stylisée** (gras / italique, exposants et indices Unicode). D'autres
 règles (HRMS, IR…) peuvent être ajoutées facilement grâce à l'architecture
 modulaire (voir plus bas).
@@ -44,7 +45,8 @@ est inséré. Si la parenthèse est absente ou trop incomplète, le paragraphe e
 
 Le symbole δ qui précède la liste des signaux est écrit **en italique**. Les
 variantes d'entrée (`δ`, `ẟ`, éventuellement suivies de `(ppm) =`) sont
-normalisées en un `δ` italique standard.
+normalisées en un `δ` italique standard. Le symbole `J` des constantes de
+couplage (`J = 8.4 Hz`) est lui aussi mis en italique (désactivable).
 
 ### Exposants et indices Unicode
 
@@ -93,13 +95,22 @@ décimale (`7,26`). Un point ou point-virgule final après la liste est conserv�
 
 Pour chaque signal, l'ordre est : déplacement chimique (valeur unique ou plage
 `a–b`) → multiplicité → `J = x.x Hz` (une décimale, si présente) → intégration →
-attribution (optionnelle). Multiplicités autorisées : `s`, `d`, `t`, `q`,
-`quint`, `septic`, `m`, `dd`, `br s` ; `bs` en entrée est normalisé en `br s`.
-Une multiplicité hors table (`td`, `dt`, `ddd`…) ou un champ inconnu placé avant
+attribution (optionnelle). Multiplicités autorisées par défaut : simples
+(`s`, `d`, `t`, `q`, `quint`, `sext`, `sept`, `hept`, `septic`, `m`), composées
+(`dd`, `dt`, `td`, `tt`, `dq`, `qd`, `ddd`, `ddt`, `dtd`, `tdd`, `dddd`, `qt`,
+`tq`), larges (`br s`, `br d`…, avec `bs`/`bd`/`br. s` normalisés en `br x`) et
+apparentes (`app t`…). Une multiplicité hors table (`ddq`…) ou un champ inconnu placé avant
 un champ reconnu rendent le signal non parsable (liste laissée telle quelle et
 signalée) ; ajoutez la multiplicité dans les paramètres pour qu'elle soit
 reconnue. Plusieurs constantes sont acceptées : `J = 8.4, 2.1 Hz` ou
 `J = 8.4 Hz, J = 2.1 Hz` (forme d'entrée conservée).
+
+Le label est aussi reconnu écrit avec un tiret (`1H-NMR` → `¹H NMR`). Un
+déplacement négatif peut être écrit avec un trait d'union, le signe moins
+Unicode `−` ou un tiret `–` (inséré par Word) : le signe est conservé tel quel.
+Dans l'attribution, seuls les groupes chimiques passent en indices (`OCH3` →
+`OCH₃`, `N(CH3)2` → `N(CH₃)₂`) ; les numéros de position (`H4`, `C3`, `C4'`)
+restent inchangés. Le solvant accepte une parenthèse (`(CD3)2SO` → `(CD₃)₂SO`).
 
 La mise en forme Word du paragraphe est conservée : le texte hors section garde
 toutes ses propriétés (police, taille, couleur…), et la section reformatée
@@ -113,11 +124,51 @@ hypertexte, champ…) n'est pas modifié et est signalé.
 ¹³C NMR (<fréquence> MHz, <solvant>, <température> K) δ <signaux>
 ```
 
-La règle reconnaît en entrée aussi bien `13C NMR` que `13C RMN`. Les signaux
+La règle reconnaît en entrée aussi bien `13C NMR` que `13C RMN`, ainsi que la
+forme découplée `13C{1H} NMR` (→ `¹³C{¹H} NMR`). Les signaux
 découplés sont donnés par leur déplacement chimique (une décimale) suivi d'une
 attribution optionnelle entre parenthèses (`Cq`, `CH`, `CH₂`, `CH₃`, `C=O`…).
 La multiplicité et la constante de couplage `J` sont conservées lorsqu'un
 couplage est présent (ex. `162.3 (d, J = 245 Hz)` pour un couplage C–F).
+
+## Formats cibles `19F NMR` et `31P NMR`
+
+```
+¹⁹F{¹H} NMR (<fréquence> MHz, <solvant>, <température> K) δ <signaux>
+³¹P{¹H} NMR (<fréquence> MHz, <solvant>, <température> K) δ <signaux>
+```
+
+Même traitement que `1H NMR` (parenthèse, δ, tri, règle de sûreté), avec
+découplage `{1H}` optionnel conservé ; intégration acceptée (`3F`).
+
+## Format cible `HRMS`
+
+```
+HRMS (ESI-TOF) m/z: [M + H]⁺ Calcd for C₁₀H₁₃O₂ 165.0910; Found 165.0912.
+```
+
+Format de l'ACS (*J. Org. Chem.*) : label et méthode d'ionisation en gras,
+*m/z* en italique, ion normalisé et placé avant `Calcd for` (`[M+H]+` →
+`[M + H]⁺`, `[M-H]-` → `[M − H]⁻`, `(M+)` ou `M+•` → `[M]⁺` / `[M]⁺•`,
+`[M+2H]2+` → `[M + 2H]²⁺`), formule en indices Unicode, `calcd` / `found` →
+`Calcd` / `Found`, séparateur `;`. L'ion peut être écrit avant `calcd` ou
+après la formule.
+
+**Les masses ne sont jamais modifiées**, seulement vérifiées :
+
+- la masse calculée est recalculée depuis la formule (masses monoisotopiques,
+  `core/rules/mass.py`). La formule peut être celle de l'ion (`C10H13O2`) ou
+  la formule neutre (`C10H12O2`) combinée à l'ion, avec ou sans la masse de
+  l'électron. Une valeur incohérente est signalée avec la valeur attendue ;
+- un écart masse trouvée / calculée supérieur à la tolérance (5 ppm par
+  défaut, paramétrable) est signalé ;
+- un ion ou une méthode d'ionisation absents sont signalés ; un élément
+  inconnu de la table rend la masse non vérifiable (signalé).
+
+Une entrée dont la structure n'est pas reconnue (virgule décimale, ordre
+inhabituel…) est laissée telle quelle et signalée. Une simple mention de
+« HRMS » dans une phrase (sans `calcd` / `found`) est ignorée. Une section RMN
+collée devant une entrée HRMS s'arrête au label `HRMS`.
 
 ## Installation
 
@@ -209,8 +260,14 @@ règles RMN. Paramètres éditables :
   est absente ou illisible (défaut `[??? K]`). Tant qu'il garde sa forme par
   défaut, il suit l'unité choisie (`[??? °C]`).
 - **Ordre des signaux** : décroissant (défaut), croissant ou ordre du document.
-- **Label et parenthèse en gras** et **symbole δ en italique** : activent ou
-  désactivent ces styles.
+- **Label et parenthèse en gras**, **symbole δ en italique** et **J en
+  italique** : activent ou désactivent ces styles.
+- **Écart HRMS toléré (ppm)** : au-delà, l'écart entre masse trouvée et masse
+  calculée est signalé (défaut 5 ppm).
+- **Évaluation** : pourcentage minimal de sections conformes pour chaque note
+  (défaut : Parfait 100, Très bon 90, Bon 75, Correct 50 ; en dessous :
+  Mauvais). Les seuils doivent être décroissants entre 0 et 100, sinon les
+  valeurs par défaut sont reprises.
 - **Unité de température** : `K` ou `°C`. Elle est ajoutée aux températures
   écrites sans unité (`298` → `298 °C`), sans conversion. Une température déjà
   écrite dans l'autre unité (`298 K` alors que `°C` est configuré, ou `25 °C`
@@ -247,7 +304,30 @@ python cli.py "partie exp.docx"
 python cli.py "partie exp.docx" "resultat.docx"
 # sans commentaires Word :
 python cli.py --sans-commentaires "partie exp.docx"
+# évaluation seule, aucun fichier écrit :
+python cli.py --evaluer "partie exp.docx"
 ```
+
+### Mode évaluation
+
+**Évaluer sans modifier** (interface) ou `--evaluer` (ligne de commande) note
+la conformité d'un document **sans rien écrire**. Chaque section reconnue
+(section RMN, entrée HRMS…) est classée :
+
+- **conforme** : rien à corriger ni à signaler ;
+- **corrigeable** : le format n'est pas respecté, mais **Standardiser** le
+  corrige automatiquement ;
+- **à vérifier** : un point demande une intervention (signalement, marqueur
+  de donnée manquante).
+
+Le **score** est le pourcentage de sections conformes ; la **note**
+(Parfait, Très bon, Bon, Correct, Mauvais) en découle selon les seuils des
+Paramètres. Le résultat détaille le score par règle, les **règles non
+respectées** regroupées par type (« Fréquence normalisée », « Masse calculée
+incohérente avec la formule »…) avec le nombre de sections concernées, et
+chaque section non conforme. Un document déjà standardisé est reconnu (labels
+`¹H NMR`, `¹³C{¹H} NMR`… en exposants) : l'évaluer après **Standardiser**
+montre ce qui reste à vérifier à la main.
 
 ## Exécutable Windows
 
@@ -288,6 +368,7 @@ python -m pytest
 core/
   docx_io.py        Lecture / écriture .docx, accès au texte des paragraphes
   processor.py      Applique les règles à un document, produit le rapport
+  evaluation.py     Mode évaluation : score, note, écarts (sans écrire)
   rules/
     base.py         Interface Rule + types Action / RuleResult / StyledSegment
     registry.py     Registre ordonné des règles
@@ -297,6 +378,9 @@ core/
                     parenthèse, delta, signaux, sortie stylisée)
     nmr_1h.py       Règle 1H NMR (noyau + formatage d'un signal)
     nmr_13c.py      Règle 13C NMR (noyau + formatage d'un signal)
+    nmr_hetero.py   Règles 19F NMR et 31P NMR
+    hrms.py         Règle HRMS (format + vérification des masses)
+    mass.py         Masses monoisotopiques, formule brute, m/z d'un ion
 ui/
   controller.py     Logique applicative (sans interface, testable)
   web_api.py        API Python appelée par l'interface (pywebview)
@@ -313,7 +397,9 @@ métier.
 ## Règles disponibles
 
 - `1H NMR` — `core/rules/nmr_1h.py` (sortie stylisée, voir ci-dessus) ;
-- `13C NMR` — `core/rules/nmr_13c.py` (sortie stylisée, implémentée).
+- `13C NMR` — `core/rules/nmr_13c.py` (sortie stylisée, implémentée) ;
+- `19F NMR`, `31P NMR` — `core/rules/nmr_hetero.py` (sortie stylisée) ;
+- `HRMS` — `core/rules/hrms.py` (sortie stylisée, masses vérifiées).
 
 Le catalogue central des règles est la fonction `available_rules()` de
 `core/processor.py` : toute règle qui y figure est automatiquement proposée dans

@@ -217,8 +217,16 @@ def available_rules() -> List:
     """
     from core.rules.nmr_1h import OneHNmrRule
     from core.rules.nmr_13c import ThirteenCNmrRule
+    from core.rules.hrms import HrmsRule
+    from core.rules.nmr_hetero import NineteenFNmrRule, ThirtyOnePNmrRule
 
-    return [OneHNmrRule(), ThirteenCNmrRule()]
+    return [
+        OneHNmrRule(),
+        ThirteenCNmrRule(),
+        NineteenFNmrRule(),
+        ThirtyOnePNmrRule(),
+        HrmsRule(),
+    ]
 
 
 def build_registry(enabled_names: "set[str] | None" = None) -> RuleRegistry:

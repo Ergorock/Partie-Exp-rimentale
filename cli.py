@@ -3,11 +3,15 @@
 Usage::
 
     python cli.py [--sans-commentaires] <entrée.docx> [sortie.docx]
+    python cli.py --evaluer <entrée.docx>
 
 Si le fichier de sortie n'est pas fourni, il est déduit du nom d'entrée en
 ajoutant le suffixe ``_standardise``. Par défaut, chaque paragraphe à vérifier
 reçoit un commentaire Word dans le fichier de sortie ; ``--sans-commentaires``
 désactive ces commentaires.
+
+``--evaluer`` n'écrit aucun fichier : il affiche le pourcentage de sections
+conformes, la note obtenue et les règles non respectées.
 """
 
 from __future__ import annotations
@@ -15,9 +19,11 @@ from __future__ import annotations
 import os
 import sys
 
+from core.evaluation import evaluate_file
 from core.processor import standardize_file
 
 NO_COMMENTS_FLAG = "--sans-commentaires"
+EVALUATE_FLAG = "--evaluer"
 
 
 def usage() -> str:
@@ -26,7 +32,10 @@ def usage() -> str:
         program = os.path.basename(sys.executable)
     else:
         program = "python cli.py"
-    return f"Usage : {program} [{NO_COMMENTS_FLAG}] <entrée.docx> [sortie.docx]"
+    return (
+        f"Usage : {program} [{NO_COMMENTS_FLAG}] <entrée.docx> [sortie.docx]\n"
+        f"        {program} {EVALUATE_FLAG} <entrée.docx>"
+    )
 
 
 def default_output_path(input_path: str) -> str:
@@ -49,7 +58,8 @@ def main(argv: list[str]) -> int:
     _force_utf8_stdout()
     args = argv[1:]
     annotate = NO_COMMENTS_FLAG not in args
-    args = [a for a in args if a != NO_COMMENTS_FLAG]
+    evaluate = EVALUATE_FLAG in args
+    args = [a for a in args if a not in (NO_COMMENTS_FLAG, EVALUATE_FLAG)]
     unknown = [a for a in args if a.startswith("--")]
     if unknown or not args:
         if unknown:
@@ -61,6 +71,14 @@ def main(argv: list[str]) -> int:
     if not os.path.exists(input_path):
         print(f"Fichier introuvable : {input_path}")
         return 1
+
+    if evaluate:
+        if len(args) > 1:
+            print(f"{EVALUATE_FLAG} n'écrit aucun fichier : pas de fichier de sortie.")
+            print(usage())
+            return 2
+        print(evaluate_file(input_path).summary())
+        return 0
 
     output_path = args[1] if len(args) > 1 else default_output_path(input_path)
     try:

@@ -31,7 +31,7 @@ function prettyRuleName(name) {
 }
 
 // Aperçu de la mise en forme produite dans Word : label + parenthèse en gras,
-// δ en italique (selon les paramètres). Affichage seulement.
+// δ et J en italique (selon les paramètres), m/z en italique. Affichage seulement.
 function renderNmr(text) {
   let html = escapeHtml(text);
   if (state.settings?.bold_label !== false) {
@@ -39,9 +39,14 @@ function renderNmr(text) {
       /([⁰¹²³⁴-⁹]+[A-Za-z]+(?:\{[^}]*\})?\s*(?:NMR|RMN)\s*\([^)]*\))/g,
       "<b>$1</b>"
     );
+    html = html.replace(/(HRMS(?: \([^)]*\))?)(?= m\/z)/g, "<b>$1</b>");
   }
   if (state.settings?.italic_delta !== false) {
     html = html.replace(/δ/g, "<i>δ</i>");
+  }
+  html = html.replace(/\bm\/z(?=:)/g, "<i>m/z</i>");
+  if (state.settings?.italic_j !== false) {
+    html = html.replace(/(?<![A-Za-z])J(?=\s*=)/g, "<i>J</i>");
   }
   return html;
 }
@@ -113,6 +118,7 @@ function enabledRules() {
 
 function updateRunButton() {
   $("run").disabled = !state.input || !state.output || enabledRules().length === 0;
+  $("evaluate").disabled = !state.input || enabledRules().length === 0;
 }
 
 // --- Standardisation --------------------------------------------------------------
@@ -149,6 +155,7 @@ function renderReport() {
   const toReview = report.paragraphs.filter((p) => p.needs_review).length;
 
   $("empty").hidden = true;
+  $("evaluation").hidden = true;
   $("report").hidden = false;
 
   if (report.paragraphs.length === 0) {
@@ -216,6 +223,129 @@ function renderEntry(p) {
   return li;
 }
 
+// --- Évaluation (le calcul est en Python ; ici, affichage seulement) -------------
+
+const THRESHOLD_KEYS = ["parfait", "tres_bon", "bon", "correct"];
+const STATUS_ORDER = { "à vérifier": 0, "corrigé": 1, "conforme": 2 };
+const ISSUE_LABELS = { flagged: "À vérifier", placeholder: "Marqueur", corrected: "Corrigeable" };
+
+// Tonalité de la note : verte (Parfait, Très bon), ambre (Bon, Correct), rouge.
+function gradeTone(grade) {
+  if (grade === "Parfait" || grade === "Très bon") return "good";
+  if (grade === "Bon" || grade === "Correct") return "fair";
+  if (grade === "Mauvais") return "bad";
+  return "none";
+}
+
+function percent(value) {
+  return `${Math.round(value)} %`;
+}
+
+async function evaluate() {
+  const button = $("evaluate");
+  button.disabled = true;
+  button.textContent = "Évaluation…";
+  try {
+    const result = await api().evaluate(state.input, enabledRules());
+    if (!result.success) {
+      showError(result.message);
+      return;
+    }
+    showError("");
+    renderEvaluation(result.evaluation);
+  } finally {
+    button.textContent = "Évaluer sans modifier";
+    updateRunButton();
+  }
+}
+
+function renderEvaluation(ev) {
+  $("empty").hidden = true;
+  $("report").hidden = true;
+  $("evaluation").hidden = false;
+
+  const tone = gradeTone(ev.grade);
+  $("eval-score").textContent = ev.score === null ? "—" : percent(ev.score);
+  $("eval-grade").textContent = ev.grade;
+  $("eval-grade").dataset.tone = tone;
+  $("eval-fill").dataset.tone = tone;
+  $("eval-fill").style.width = `${ev.score ?? 0}%`;
+
+  // Repères des seuils sur la jauge.
+  const gauge = $("eval-gauge");
+  gauge.querySelectorAll(".tick").forEach((t) => t.remove());
+  for (const key of THRESHOLD_KEYS) {
+    const value = ev.thresholds[key];
+    if (value <= 0 || value >= 100) continue;
+    const tick = document.createElement("span");
+    tick.className = "tick";
+    tick.style.left = `${value}%`;
+    gauge.appendChild(tick);
+  }
+
+  const name = splitPath(state.input)[1];
+  if (ev.total === 0) {
+    $("eval-subline").textContent = `Aucune section reconnue par les règles dans ${name}.`;
+  } else {
+    const c = ev.counts;
+    $("eval-subline").textContent =
+      `${ev.ok} sur ${plural(ev.total, "section", "sections")} conforme${ev.ok > 1 ? "s" : ""}` +
+      ` · ${c["corrigé"]} corrigeable${c["corrigé"] > 1 ? "s" : ""} automatiquement` +
+      ` · ${c["à vérifier"]} à vérifier · ${name}`;
+  }
+
+  $("eval-rules-block").hidden = ev.by_rule.length === 0;
+  $("eval-rules").innerHTML = ev.by_rule
+    .map(
+      (r) => `<tr>
+        <th scope="row"><span class="rule-name">${escapeHtml(prettyRuleName(r.rule))}</span></th>
+        <td class="bar"><span class="track"><span class="fill" style="width:${r.score}%"></span></span></td>
+        <td class="num">${percent(r.score)}</td>
+        <td class="num muted">${r.ok}/${r.total}</td>
+      </tr>`
+    )
+    .join("");
+
+  $("eval-issues-block").hidden = ev.issues.length === 0;
+  $("eval-issues").innerHTML = ev.issues
+    .map(
+      (i) => `<li class="issue ${i.kind}">
+        <span class="issue-kind">${ISSUE_LABELS[i.kind] || i.kind}</span>
+        <span class="issue-text"><span class="rule-tag">${escapeHtml(prettyRuleName(i.rule))}</span> ${escapeHtml(i.description)}</span>
+        <span class="num">${plural(i.count, "section", "sections")}</span>
+      </li>`
+    )
+    .join("");
+
+  const bad = ev.items
+    .filter((i) => i.status !== "conforme")
+    .sort((a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status]);
+  $("eval-items-block").hidden = bad.length === 0;
+  $("eval-items").innerHTML = "";
+  for (const item of bad) $("eval-items").appendChild(renderEvalItem(item));
+}
+
+function renderEvalItem(item) {
+  const li = document.createElement("li");
+  li.className = "entry";
+  const notes = item.actions.filter((a) => a.kind !== "corrected");
+  const fixes = item.actions.filter((a) => a.kind === "corrected");
+  const notesHtml = notes
+    .map((a) => `<div class="note ${a.kind}"><strong>${escapeHtml(a.label)}</strong>${escapeHtml(a.message)}</div>`)
+    .join("");
+  const fixesHtml = fixes.length
+    ? `<ul class="fixes">${fixes.map((a) => `<li>${escapeHtml(a.message)}</li>`).join("")}</ul>`
+    : "";
+  li.innerHTML = `
+    <p class="entry-where">${escapeHtml(item.label)} · ${escapeHtml(prettyRuleName(item.rule))} · ${escapeHtml(item.status)}</p>
+    <div>
+      <p class="entry-text">${escapeHtml(item.text)}</p>
+      ${fixesHtml ? `<details open><summary>Corrections que la standardisation appliquerait</summary>${fixesHtml}</details>` : ""}
+    </div>
+    <div class="notes">${notesHtml || '<p class="note-ok">Corrigeable automatiquement</p>'}</div>`;
+  return li;
+}
+
 // --- Paramètres --------------------------------------------------------------------
 
 function addMultRow(written = "", becomes = "") {
@@ -237,6 +367,9 @@ function fillSettings(s) {
   $("placeholder").value = s.temperature_placeholder;
   $("bold-label").checked = s.bold_label;
   $("italic-delta").checked = s.italic_delta;
+  $("italic-j").checked = s.italic_j;
+  $("hrms-ppm").value = s.hrms_ppm_tolerance;
+  for (const key of THRESHOLD_KEYS) $(`th-${key}`).value = s.evaluation_thresholds[key];
 }
 
 function collectSettings() {
@@ -252,6 +385,9 @@ function collectSettings() {
     temperature_placeholder: $("placeholder").value,
     bold_label: $("bold-label").checked,
     italic_delta: $("italic-delta").checked,
+    italic_j: $("italic-j").checked,
+    hrms_ppm_tolerance: Number($("hrms-ppm").value),
+    evaluation_thresholds: Object.fromEntries(THRESHOLD_KEYS.map((k) => [k, Number($(`th-${k}`).value)])),
   };
 }
 
@@ -275,6 +411,7 @@ function wire() {
   $("change-input").addEventListener("click", chooseInput);
   $("choose-output").addEventListener("click", chooseOutput);
   $("run").addEventListener("click", run);
+  $("evaluate").addEventListener("click", evaluate);
   $("open-output").addEventListener("click", () => api().open_output(state.lastOutput));
   for (const b of document.querySelectorAll("[data-filter]")) {
     b.addEventListener("click", () => {

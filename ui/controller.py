@@ -11,6 +11,7 @@ import os
 from dataclasses import dataclass
 from typing import List
 
+from core.evaluation import CONFORM, CORRECTED, TO_REVIEW, EvaluationReport, evaluate_file
 from core.processor import ProcessingReport, available_rules, same_file, standardize_file
 from core.rules.base import ActionKind
 
@@ -158,3 +159,72 @@ def run_standardization(
         f"{report.action_count} action(s).\nFichier écrit : {output_path}"
     )
     return StandardizeOutcome(True, message, output_path, report)
+
+
+# --------------------------------------------------------------------------- #
+# Mode évaluation
+# --------------------------------------------------------------------------- #
+
+@dataclass
+class EvaluateOutcome:
+    """Résultat d'une demande d'évaluation depuis l'UI."""
+
+    success: bool
+    message: str
+    report: EvaluationReport | None = None
+
+
+def evaluation_to_dict(report: EvaluationReport) -> dict:
+    """Convertit une évaluation en dictionnaire JSON-compatible pour l'interface."""
+    return {
+        "score": report.score,
+        "grade": report.grade,
+        "total": report.total,
+        "ok": report.ok_count,
+        "counts": {s: report.count(s) for s in (CONFORM, CORRECTED, TO_REVIEW)},
+        "thresholds": dict(report.thresholds),
+        "by_rule": [
+            {"rule": r.rule_name, "ok": r.ok_count, "total": r.total, "score": r.score}
+            for r in report.by_rule()
+        ],
+        "issues": [
+            {"rule": i.rule_name, "kind": i.kind, "description": i.description, "count": i.count}
+            for i in report.issues()
+        ],
+        "items": [
+            {
+                "label": item.label,
+                "rule": item.rule_name,
+                "status": item.status,
+                "text": item.text,
+                "actions": [
+                    {
+                        "kind": a.kind.value,
+                        "label": _KIND_UI_LABELS.get(a.kind, a.kind.value),
+                        "message": a.message,
+                    }
+                    for a in item.actions
+                    if a.kind != ActionKind.UNCHANGED
+                ],
+            }
+            for item in report.items
+        ],
+        "summary": report.summary(),
+    }
+
+
+def run_evaluation(input_path: str, enabled_names: "set[str] | None" = None) -> EvaluateOutcome:
+    """Évalue le document (sans l'écrire) et retourne un résultat pour l'affichage."""
+    if not input_path:
+        return EvaluateOutcome(False, "Aucun fichier d'entrée sélectionné.")
+    if not os.path.exists(input_path):
+        return EvaluateOutcome(False, f"Fichier introuvable : {input_path}")
+    if not input_path.lower().endswith(".docx"):
+        return EvaluateOutcome(False, "Le fichier d'entrée doit être un .docx.")
+    if enabled_names is not None and len(enabled_names) == 0:
+        return EvaluateOutcome(False, "Aucune règle sélectionnée.")
+    try:
+        report = evaluate_file(input_path, enabled_names)
+    except Exception as exc:  # pragma: no cover - dépend de l'environnement
+        return EvaluateOutcome(False, f"Erreur pendant l'évaluation : {exc}")
+    return EvaluateOutcome(True, "Évaluation terminée.", report)

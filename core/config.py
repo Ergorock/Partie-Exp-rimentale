@@ -33,19 +33,53 @@ _TEMPERATURE_UNITS = ("K", "\u00b0C")  # 'K' | '°C'
 
 
 def _default_multiplicities() -> Dict[str, str]:
-    """Multiplicités reconnues par défaut (copie exacte de ``_MULTIPLICITIES``)."""
-    return {
-        "br s": "br s",
-        "bs": "br s",
-        "dd": "dd",
-        "quint": "quint",
-        "septic": "septic",
-        "s": "s",
-        "d": "d",
-        "t": "t",
-        "q": "q",
-        "m": "m",
-    }
+    """Multiplicités reconnues par défaut : écrit dans le document -> sortie.
+
+    Couvre les multiplicités simples, les multiplicités composées usuelles
+    (``dd``, ``td``, ``ddd``…), les signaux larges (``br``) et apparents
+    (``app``). Les variantes d'écriture (``bs``, ``br. s``, ``bd``) sont
+    ramenées à la forme ``br x``.
+    """
+    simple = ["s", "d", "t", "q", "quint", "sext", "sept", "hept", "septic", "m"]
+    composite = [
+        "dd", "dt", "td", "tt", "dq", "qd", "ddd", "ddt", "dtd", "tdd",
+        "dddd", "qt", "tq",
+    ]
+    table = {m: m for m in simple + composite}
+    for base in ("s", "d", "t", "q", "m", "dd"):
+        table[f"br {base}"] = f"br {base}"
+        table[f"br. {base}"] = f"br {base}"
+    for base in ("s", "d", "t", "q"):  # abréviations usuelles 'bs', 'bd'…
+        table[f"b{base}"] = f"br {base}"
+    for base in ("d", "t", "q", "quint", "dd", "dt", "td"):
+        table[f"app {base}"] = f"app {base}"
+    return table
+
+
+#: Notes du mode évaluation, de la meilleure à la moins bonne (hors « Mauvais »).
+EVALUATION_GRADES = ("parfait", "tres_bon", "bon", "correct")
+
+
+def _default_evaluation_thresholds() -> Dict[str, float]:
+    """Seuils par défaut des notes (pourcentage de sections conformes)."""
+    return {"parfait": 100.0, "tres_bon": 90.0, "bon": 75.0, "correct": 50.0}
+
+
+def _valid_thresholds(raw) -> Optional[Dict[str, float]]:
+    """Seuils valides (4 nombres dans [0, 100], décroissants), ou None."""
+    if not isinstance(raw, dict) or set(raw) != set(EVALUATION_GRADES):
+        return None
+    values = []
+    for key in EVALUATION_GRADES:
+        value = raw[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        if not 0 <= value <= 100:
+            return None
+        values.append(float(value))
+    if any(a < b for a, b in zip(values, values[1:])):
+        return None
+    return dict(zip(EVALUATION_GRADES, values))
 
 
 @dataclass
@@ -63,6 +97,13 @@ class RmnConfig:
     bold_label: bool = True
     italic_delta: bool = True
     temperature_unit: str = "K"  # 'K' | '°C'
+    italic_j: bool = True  # constante de couplage J en italique (usage ACS/RSC)
+    hrms_ppm_tolerance: float = 5.0  # écart HRMS trouvé / calculé toléré (ppm)
+    #: Seuils (pourcentage minimal de sections conformes) des notes du mode
+    #: évaluation ; en dessous de ``correct`` : « Mauvais ».
+    evaluation_thresholds: Dict[str, float] = field(
+        default_factory=_default_evaluation_thresholds
+    )
 
 
 CONFIG_FILENAME = "rules_config.json"
@@ -118,6 +159,9 @@ def config_to_dict(config: RmnConfig) -> dict:
         "bold_label": config.bold_label,
         "italic_delta": config.italic_delta,
         "temperature_unit": config.temperature_unit,
+        "italic_j": config.italic_j,
+        "hrms_ppm_tolerance": config.hrms_ppm_tolerance,
+        "evaluation_thresholds": dict(config.evaluation_thresholds),
     }
 
 
@@ -182,7 +226,28 @@ def config_from_dict(data: dict) -> RmnConfig:
     if isinstance(raw_unit, str) and raw_unit in _TEMPERATURE_UNITS:
         temperature_unit = raw_unit
 
+    # italic_j : bool.
+    italic_j = defaults.italic_j
+    raw_italic_j = data.get("italic_j")
+    if isinstance(raw_italic_j, bool):
+        italic_j = raw_italic_j
+
+    # hrms_ppm_tolerance : nombre strictement positif (un booléen est refusé).
+    hrms_ppm_tolerance = defaults.hrms_ppm_tolerance
+    raw_ppm = data.get("hrms_ppm_tolerance")
+    if isinstance(raw_ppm, (int, float)) and not isinstance(raw_ppm, bool) and raw_ppm > 0:
+        hrms_ppm_tolerance = float(raw_ppm)
+
+    # evaluation_thresholds : 4 seuils valides, sinon tous les défauts.
+    evaluation_thresholds = (
+        _valid_thresholds(data.get("evaluation_thresholds"))
+        or defaults.evaluation_thresholds
+    )
+
     return RmnConfig(
+        evaluation_thresholds=evaluation_thresholds,
+        italic_j=italic_j,
+        hrms_ppm_tolerance=hrms_ppm_tolerance,
         multiplicities=multiplicities,
         temperature_placeholder=temperature_placeholder,
         sort_order=sort_order,

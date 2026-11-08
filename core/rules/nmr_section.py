@@ -48,6 +48,30 @@ def _between_ok(between: str) -> bool:
     return bool(_BETWEEN_PUNCT_RE.fullmatch(between) or _BETWEEN_FREQ_RE.fullmatch(between))
 
 
+# Symbole de constante de couplage : 'J' isolé suivi de '=' (J = 8.4 Hz).
+_J_SYMBOL_RE = re.compile(r"(?<![A-Za-z])J(?=\s*=)")
+
+
+def _signal_segments(text: str, italic_j: bool) -> List[StyledSegment]:
+    """Découpe la liste des signaux en segments, avec chaque ``J`` en italique.
+
+    Seule la mise en forme change : la concaténation des segments est égale à
+    ``text``.
+    """
+    if not italic_j:
+        return [StyledSegment(text)]
+    segments: List[StyledSegment] = []
+    last = 0
+    for match in _J_SYMBOL_RE.finditer(text):
+        if match.start() > last:
+            segments.append(StyledSegment(text[last:match.start()]))
+        segments.append(StyledSegment("J", italic=True))
+        last = match.end()
+    if last < len(text):
+        segments.append(StyledSegment(text[last:]))
+    return segments
+
+
 class NmrSectionRule(Rule):
     """Règle générique de section RMN (sortie stylisée)."""
 
@@ -56,13 +80,24 @@ class NmrSectionRule(Rule):
 
     def __init__(self) -> None:
         # Label ASCII du noyau, non précédé d'un chiffre / d'une lettre / d'une
-        # accolade (évite '{1H} NMR' dans '19F{1H} NMR').
+        # accolade (évite '{1H} NMR' dans '19F{1H} NMR'). Accepte un découplage
+        # optionnel ('13C{1H} NMR') et un tiret avant le mot ('1H-NMR').
+        # La forme déjà stylisée ('¹H NMR', '¹⁹F{¹H} NMR') est aussi reconnue :
+        # une section conforme est ainsi évaluée (UNCHANGED) au lieu d'être
+        # ignorée.
+        nucleus = re.escape(self.nucleus)
+        styled = re.escape(
+            re.sub(r"^\d+", lambda m: nmr_common.to_superscript(m.group()), self.nucleus)
+        )
+        label = rf"(?:{nucleus}|{styled})(?:\{{(?:1|¹)H\}})?[\s\-–]*(?:NMR|RMN)"
         self._label_re = re.compile(
-            rf"(?<![0-9A-Za-z{{]){self.nucleus}\s*(?:NMR|RMN)\b", re.IGNORECASE
+            rf"(?<![0-9A-Za-z{{⁰¹²³⁴⁵⁶⁷⁸⁹]){label}\b", re.IGNORECASE
         )
         self._structure_re = re.compile(
-            rf"^(?P<label>{self.nucleus}\s*(?:NMR|RMN))\b"
-            r"(?P<between>[^(]*)\((?P<inside>[^)]*)\)(?P<rest>.*)$",
+            rf"^(?P<label>{label})\b"
+            # Parenthèse de section : un niveau d'imbrication toléré pour un
+            # solvant comme '(CD3)2SO'.
+            r"(?P<between>[^(]*)\((?P<inside>(?:[^()]|\([^()]*\))*)\)(?P<rest>.*)$",
             re.IGNORECASE | re.DOTALL,
         )
 
@@ -190,7 +225,7 @@ class NmrSectionRule(Rule):
             ]
             segment_plain += f" {nmr_common.DELTA}"
             if signals_text:
-                segments.append(StyledSegment(f" {signals_text}"))
+                segments += _signal_segments(f" {signals_text}", config.italic_j)
                 segment_plain += f" {signals_text}"
             # Réinsère l'espace séparateur perdu avant une section collée.
             separator = nmr_common.section_separator(original_segment, suffix)
@@ -200,9 +235,16 @@ class NmrSectionRule(Rule):
 
         new_text = f"{prefix}{segment_plain}{suffix}"
         if new_text == paragraph_text:
+            # Texte déjà conforme : les signalements (marqueur présent, signaux
+            # non analysables…) restent valables et sont conservés.
+            kept = [
+                a for a in actions
+                if a.kind in (ActionKind.FLAGGED, ActionKind.PLACEHOLDER)
+            ]
             return RuleResult(
                 new_text=paragraph_text,
-                actions=[Action(ActionKind.UNCHANGED, "Paragraphe déjà conforme.", self.name)],
+                actions=kept
+                or [Action(ActionKind.UNCHANGED, "Paragraphe déjà conforme.", self.name)],
             )
         if not actions:
             actions.append(Action(ActionKind.CORRECTED, "Paragraphe reformaté.", self.name))

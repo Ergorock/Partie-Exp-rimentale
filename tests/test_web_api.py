@@ -46,7 +46,7 @@ def _docx(tmp_path, *paragraphs, name="in.docx"):
 
 def test_initial_state_lists_rules_and_settings():
     state = Api(FakeDialogs()).get_state()
-    assert [r["name"] for r in state["rules"]] == ["1H NMR", "13C NMR"]
+    assert [r["name"] for r in state["rules"]] == ["1H NMR", "13C NMR", "19F NMR", "31P NMR", "HRMS"]
     assert state["settings"]["sort_order"] == "desc"
     assert state["defaults"] == cfg.config_to_dict(RmnConfig())
 
@@ -181,3 +181,39 @@ def test_dropped_path_reads_pywebview_full_path():
     assert dropped_path(event) == "C:/x/a.docx"
     assert dropped_path({"dataTransfer": {"files": []}}) is None
     assert dropped_path({}) is None
+
+
+# --- Évaluation -------------------------------------------------------------------
+
+CONFORM = "¹H NMR (400 MHz, CDCl₃, 298 K) δ 7.26 (s, 1H)"
+
+
+def test_evaluate_returns_score_grade_and_issues(tmp_path):
+    src = _docx(tmp_path, "Introduction", CONFORM, CORRECT_ONLY, FLAGGED)
+    result = Api(FakeDialogs()).evaluate(src, ["1H NMR"])
+    assert result["success"] is True
+    ev = result["evaluation"]
+    assert ev["total"] == 3 and ev["ok"] == 1
+    assert round(ev["score"]) == 33
+    assert ev["grade"] == "Mauvais"
+    assert ev["counts"] == {"conforme": 1, "corrigé": 1, "à vérifier": 1}
+    assert ev["by_rule"] == [{"rule": "1H NMR", "ok": 1, "total": 3, "score": ev["score"]}]
+    assert ev["issues"][0]["kind"] == "flagged"
+    assert [i["status"] for i in ev["items"]] == ["conforme", "corrigé", "à vérifier"]
+    assert ev["thresholds"] == RmnConfig().evaluation_thresholds
+    # Le document n'est pas modifié et rien n'est écrit à côté.
+    assert sorted(os.listdir(tmp_path)) == ["in.docx"]
+
+
+def test_evaluate_reports_errors_without_raising(tmp_path):
+    api = Api(FakeDialogs())
+    assert api.evaluate("", ["1H NMR"])["success"] is False
+    assert api.evaluate(os.path.join(tmp_path, "absent.docx"), ["1H NMR"])["success"] is False
+    src = _docx(tmp_path, CONFORM)
+    assert api.evaluate(src, [])["success"] is False
+
+
+def test_evaluate_without_sections_is_not_evaluable(tmp_path):
+    src = _docx(tmp_path, "Introduction")
+    ev = Api(FakeDialogs()).evaluate(src, ["1H NMR"])["evaluation"]
+    assert ev["score"] is None and ev["grade"] == "Non évaluable"

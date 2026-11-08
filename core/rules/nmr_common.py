@@ -60,14 +60,40 @@ def to_superscript(digits: str) -> str:
 def subscript_formula(text: str) -> str:
     """Met en indices Unicode les chiffres suivant une lettre dans un token chimique.
 
-    Exemples : ``CDCl3`` -> ``CDCl₃``, ``CH2`` -> ``CH₂``. On ne convertit que
-    les chiffres qui suivent immédiatement une lettre (indices stœchiométriques)
-    pour ne pas toucher aux nombres isolés (déplacements, intégrations).
+    Exemples : ``CDCl3`` -> ``CDCl₃``, ``CH2`` -> ``CH₂``,
+    ``(CD3)2SO`` -> ``(CD₃)₂SO``. On ne convertit que les chiffres qui suivent
+    immédiatement une lettre ou une parenthèse fermante (indices
+    stœchiométriques) pour ne pas toucher aux nombres isolés (déplacements,
+    intégrations).
     """
     def repl(match: re.Match) -> str:
         return "".join(_SUBSCRIPTS[c] for c in match.group(0))
 
-    return re.sub(r"(?<=[A-Za-z])\d+", repl, text)
+    return re.sub(r"(?<=[A-Za-z)])\d+", repl, text)
+
+
+# Token d'attribution : suite de lettres, chiffres, parenthèses et primes.
+_ATTRIBUTION_TOKEN_RE = re.compile(r"[A-Za-z0-9()'′″]+")
+
+# Numéro de position : UN symbole d'élément suivi d'un numéro, éventuellement
+# d'une lettre minuscule et de primes (``H4``, ``C3``, ``C4'``, ``H4a``). Ce
+# n'est pas une formule : il ne faut pas le mettre en indice.
+_POSITION_RE = re.compile(r"[A-Z][a-z]?\d+[a-z]?['′″]*")
+
+
+def subscript_attribution(text: str) -> str:
+    """Met en indices les groupes chimiques d'une attribution, pas les positions.
+
+    ``OCH3`` -> ``OCH₃`` et ``N(CH3)2`` -> ``N(CH₃)₂``, mais ``H4``, ``C3`` ou
+    ``C4'`` (numérotation des atomes) restent inchangés.
+    """
+    def repl(match: re.Match) -> str:
+        token = match.group(0)
+        if _POSITION_RE.fullmatch(token):
+            return token
+        return subscript_formula(token)
+
+    return _ATTRIBUTION_TOKEN_RE.sub(repl, text)
 
 
 def normalize_spaces(text: str) -> str:
@@ -88,6 +114,9 @@ def superscript_label(label: str) -> str:
     ``13C RMN`` -> ``¹³C RMN``, ``19F{1H} NMR`` -> ``¹⁹F{¹H} NMR``.
     """
     label = normalize_spaces(label).strip()
+    # Séparateur avant le mot d'entrée normalisé en une espace
+    # ('1H-NMR' / '1HNMR' -> '1H NMR') ; le mot lui-même est conservé.
+    label = re.sub(r"[\s\-–]*(NMR|RMN)$", r" \1", label, flags=re.IGNORECASE)
     # Nombre de masse initial -> exposant.
     label = re.sub(r"^(\d+)", lambda m: to_superscript(m.group(1)), label)
     # Nombres de masse à l'intérieur d'accolades (ex. {1H}).
@@ -110,7 +139,7 @@ _SECTION_LABEL_RE = re.compile(
     r"[0-9\u2070\u00b9\u00b2\u00b3\u2074-\u2079]+"  # nombre de masse (ascii ou exposant)
     r"[A-Za-z]+"                                     # symbole de l'élément
     r"(?:\{[^}]*\})?"                                # couplage optionnel {1H}
-    r"\s*(?:NMR|RMN)\b",
+    r"[\s\-–]*(?:NMR|RMN)\b",                   # séparateur : espace ou tiret
     re.IGNORECASE,
 )
 
@@ -130,12 +159,22 @@ def section_span(text: str, start: int = 0) -> Tuple[int, int]:
     Returns:
         Le couple ``(start, end)`` délimitant le segment (``end`` exclu).
     """
-    # On cherche le prochain label de section strictement après celui de départ.
+    # On cherche le prochain label de section (RMN ou autre analyse)
+    # strictement après celui de départ.
     first = _SECTION_LABEL_RE.match(text, start)
     search_from = first.end() if first else start + 1
-    nxt = _SECTION_LABEL_RE.search(text, search_from)
-    end = nxt.start() if nxt else len(text)
-    return start, end
+    ends = [
+        nxt.start()
+        for pattern in (_SECTION_LABEL_RE, _OTHER_ANALYSIS_RE)
+        for nxt in [pattern.search(text, search_from)]
+        if nxt
+    ]
+    return start, min(ends, default=len(text))
+
+
+# Label d'une autre analyse qui termine une section RMN collée devant elle
+# (``… δ 77.0. HRMS (ESI) …``). À compléter pour chaque nouvelle règle.
+_OTHER_ANALYSIS_RE = re.compile(r"(?<![A-Za-z])HRMS(?![A-Za-z])")
 
 
 def section_separator(segment: str, suffix: str) -> str:
@@ -266,7 +305,12 @@ def normalize_parenthesis(
 
     # Température (3e élément).
     if len(elements) >= 3:
-        if not re.search(r"\d+(?:\.\d+)?", elements[2]):
+        if elements[2] == config.temperature_placeholder:
+            # Marqueur déjà présent (document déjà traité) : toujours à compléter.
+            actions.append(
+                ("placeholder", f"Température manquante : marqueur '{elements[2]}' à compléter.")
+            )
+        elif not re.search(r"\d+(?:\.\d+)?", elements[2]):
             elements[2] = config.temperature_placeholder
             actions.append(("placeholder", "Température illisible : marqueur inséré."))
         elif (
@@ -403,8 +447,22 @@ def _split_top_level(body: str) -> List[str]:
     return [p.strip() for p in parts if p.strip()]
 
 
+# Signe moins accepté devant un déplacement : trait d'union, signe moins
+# Unicode (U+2212) ou tiret demi-cadratin (souvent inséré par Word). Le signe
+# est conservé tel qu'écrit en sortie.
+_MINUS = r"\-" + "\u2212\u2013"
+
 # Déplacement chimique : valeur unique ou plage 'a-b' / 'a–b'.
-_SHIFT_RE = re.compile(r"^\s*(-?\d+(?:\.\d+)?)(?:\s*[-\u2013]\s*(-?\d+(?:\.\d+)?))?")
+_SHIFT_RE = re.compile(
+    rf"^\s*([{_MINUS}]?\d+(?:\.\d+)?)"
+    rf"(?:\s*[-\u2013]\s*([{_MINUS}]?\d+(?:\.\d+)?))?"
+)
+
+
+def _to_float(value: str) -> float:
+    """Valeur numérique d'un déplacement, quel que soit le signe moins écrit."""
+    return float(re.sub(rf"^[{_MINUS}]", "-", value))
+
 
 # Après le déplacement, un signal ne peut contenir qu'une parenthèse simple
 # (sans parenthèse imbriquée) et rien d'autre : c'est la condition pour pouvoir
@@ -485,10 +543,10 @@ def parse_signals(
         high = shift_match.group(2)
         if high is not None:
             shift_text = f"{low}\u2013{high}"  # tiret demi-cadratin
-            shift_high = max(float(low), float(high))
+            shift_high = max(_to_float(low), _to_float(high))
         else:
             shift_text = low
-            shift_high = float(low)
+            shift_high = _to_float(low)
 
         rest = raw[shift_match.end():].strip()
         multiplicity = None
@@ -603,7 +661,7 @@ def format_signal_1h(signal: Signal) -> str:
     if signal.integration:
         parts.append(signal.integration)
     if signal.attribution:
-        parts.append(subscript_formula(signal.attribution))
+        parts.append(subscript_attribution(signal.attribution))
     if parts:
         return f"{signal.shift} ({', '.join(parts)})"
     return signal.shift
@@ -624,7 +682,7 @@ def format_signal_13c(signal: Signal) -> str:
     if signal.integration:
         parts.append(signal.integration)
     if signal.attribution:
-        parts.append(subscript_formula(signal.attribution))
+        parts.append(subscript_attribution(signal.attribution))
     if parts:
         return f"{signal.shift} ({', '.join(parts)})"
     return signal.shift
