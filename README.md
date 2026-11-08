@@ -15,9 +15,10 @@ modulaire (voir plus bas).
 Les deux règles RMN partagent la logique du module `core/rules/nmr_common.py`
 et appliquent les conventions suivantes.
 
-### Label et parenthèse (en gras)
+### Label (en gras) et parenthèse
 
-Le label et la parenthèse qui le suit sont écrits **en gras**. Le mot d'entrée
+Seul le label (`¹H NMR`, `¹³C NMR`…) est écrit **en gras** ; la parenthèse qui
+le suit reste en style normal. Le mot d'entrée
 est **conservé tel quel** : `1H NMR` reste `NMR`, `1H RMN` reste `RMN` ; on
 ajoute seulement l'exposant Unicode au nombre de masse (`1H` → `¹H`,
 `13C` → `¹³C`, `19F{1H}` → `¹⁹F{¹H}`).
@@ -147,7 +148,7 @@ découplage `{1H}` optionnel conservé ; intégration acceptée (`3F`).
 HRMS (ESI-TOF) m/z: [M + H]⁺ Calcd for C₁₀H₁₃O₂ 165.0910; Found 165.0912.
 ```
 
-Format de l'ACS (*J. Org. Chem.*) : label et méthode d'ionisation en gras,
+Format de l'ACS (*J. Org. Chem.*) : label `HRMS` seul en gras,
 *m/z* en italique, ion normalisé et placé avant `Calcd for` (`[M+H]+` →
 `[M + H]⁺`, `[M-H]-` → `[M − H]⁻`, `(M+)` ou `M+•` → `[M]⁺` / `[M]⁺•`,
 `[M+2H]2+` → `[M + 2H]²⁺`), formule en indices Unicode, `calcd` / `found` →
@@ -260,7 +261,7 @@ règles RMN. Paramètres éditables :
   est absente ou illisible (défaut `[??? K]`). Tant qu'il garde sa forme par
   défaut, il suit l'unité choisie (`[??? °C]`).
 - **Ordre des signaux** : décroissant (défaut), croissant ou ordre du document.
-- **Label et parenthèse en gras**, **symbole δ en italique** et **J en
+- **Label en gras**, **symbole δ en italique** et **J en
   italique** : activent ou désactivent ces styles.
 - **Écart HRMS toléré (ppm)** : au-delà, l'écart entre masse trouvée et masse
   calculée est signalé (défaut 5 ppm).

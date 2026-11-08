@@ -4,7 +4,7 @@ Format cible (usage ACS / J. Org. Chem.)::
 
     HRMS (<ionisation>) m/z: [M + H]⁺ Calcd for C₁₀H₁₃O₂ 165.0910; Found 165.0912.
 
-- label et méthode d'ionisation en gras (``config.bold_label``), ``m/z`` en
+- label ``HRMS`` seul en gras (``config.bold_label``), ``m/z`` en
   italique ;
 - ion normalisé (``[M+H]+`` -> ``[M + H]⁺``, ``[M-H]-`` -> ``[M − H]⁻``,
   ``M+•`` -> ``[M]⁺•``) et placé avant ``Calcd for`` ;
@@ -202,9 +202,9 @@ class HrmsRule(Rule):
         flags: List[str] = []
         method = entry.group("method")
         if method is not None and method.strip():
-            label = f"HRMS ({' '.join(method.split())})"
+            method_text = f" ({' '.join(method.split())})"
         else:
-            label = "HRMS"
+            method_text = ""
             flags.append("Méthode d'ionisation absente (ex. ESI, APCI, EI) : à compléter.")
 
         ion_text = entry.group("ion1") or entry.group("ion2")
@@ -227,8 +227,8 @@ class HrmsRule(Rule):
             + (entry.group("end") or "")
         )
         segments = [
-            StyledSegment(label, bold=config.bold_label),
-            StyledSegment(" "),
+            StyledSegment("HRMS", bold=config.bold_label),
+            StyledSegment(f"{method_text} "),
             StyledSegment("m/z", italic=True),
             StyledSegment(f": {body}"),
         ]

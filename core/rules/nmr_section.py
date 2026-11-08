@@ -3,7 +3,7 @@
 Une règle de section RMN localise SA section dans le paragraphe (en tête, ou
 après un préfixe / une autre section collée), la reformate et laisse le reste
 du paragraphe strictement intact. Format cible (exposant Unicode, gras sur le
-label + la parenthèse, delta italique)::
+label seul, delta italique)::
 
     ¹H NMR (<fréquence> MHz, <solvant>, <température> K) δ <signaux>
 
@@ -193,10 +193,15 @@ class NmrSectionRule(Rule):
         for kind, message in paren.actions:
             actions.append(Action(_KIND_MAP[kind], message, self.name))
 
-        # 3) Label stylisé (exposant Unicode, mot d'entrée conservé).
-        label_paren = f"{nmr_common.superscript_label(match.group('label'))} ({paren.text})"
-        segments = [StyledSegment(label_paren, bold=config.bold_label)]
-        segment_plain = label_paren
+        # 3) Label stylisé (exposant Unicode, mot d'entrée conservé), seul en
+        #    gras ; la parenthèse qui le suit reste en style normal.
+        label = nmr_common.superscript_label(match.group("label"))
+        paren_text = f" ({paren.text})"
+        segments = [
+            StyledSegment(label, bold=config.bold_label),
+            StyledSegment(paren_text),
+        ]
+        segment_plain = label + paren_text
 
         # 4) Signaux après le delta.
         rest = match.group("rest")

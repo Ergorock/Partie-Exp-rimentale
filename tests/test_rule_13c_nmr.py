@@ -23,7 +23,7 @@ def test_does_not_apply_to_1h():
 def test_styled_output_has_bold_label_and_italic_delta():
     result = RULE.apply("13C NMR (101 MHz, CDCl3, 298 K) δ 166.4 (C=O), 21.7 (CH3)")
     assert result.is_styled is True
-    assert any(s.bold and "NMR" in s.text for s in result.segments)
+    assert [s.text for s in result.segments if s.bold] == ["¹³C NMR"]
     assert any(s.italic and s.text == "δ" for s in result.segments)
 
 

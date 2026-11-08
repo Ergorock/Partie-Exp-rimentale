@@ -1,6 +1,6 @@
 """Règle de standardisation des sections ``1H NMR`` (sortie stylisée).
 
-Format cible (exposant Unicode, gras sur le label + la parenthèse, delta
+Format cible (exposant Unicode, gras sur le label seul, delta
 italique)::
 
     ¹H NMR (<fréquence> MHz, <solvant>, <température> K) δ <signaux>
@@ -20,8 +20,8 @@ class OneHNmrRule(NmrSectionRule):
 
     name = "1H NMR"
     description = (
-        "Format stylisé : label ¹H exposant Unicode (NMR/RMN conservé) et "
-        "parenthèse (MHz, solvant, K) en gras, δ en italique, signaux triés du "
+        "Format stylisé : label ¹H exposant Unicode (NMR/RMN conservé) en "
+        "gras, parenthèse (MHz, solvant, K), δ en italique, signaux triés du "
         "plus grand au plus petit (si tous parsables), [??? K] si température "
         "absente."
     )

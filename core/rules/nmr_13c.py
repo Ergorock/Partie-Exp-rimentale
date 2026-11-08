@@ -1,6 +1,6 @@
 """Règle de standardisation des sections ``13C NMR`` (sortie stylisée).
 
-Format cible (exposant Unicode, gras sur le label + la parenthèse, delta
+Format cible (exposant Unicode, gras sur le label seul, delta
 italique)::
 
     ¹³C NMR (<fréquence> MHz, <solvant>, <température> K) δ <signaux>
@@ -23,8 +23,8 @@ class ThirteenCNmrRule(NmrSectionRule):
 
     name = "13C NMR"
     description = (
-        "Format stylisé : label ¹³C exposant Unicode (NMR/RMN conservé) et "
-        "parenthèse (MHz, solvant, K) en gras, δ en italique, attribution () "
+        "Format stylisé : label ¹³C exposant Unicode (NMR/RMN conservé) en "
+        "gras, parenthèse (MHz, solvant, K), δ en italique, attribution () "
         "optionnelle, multiplicité et J conservées si couplage, signaux triés "
         "du plus grand au plus petit (si tous parsables)."
     )

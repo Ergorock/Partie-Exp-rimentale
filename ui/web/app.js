@@ -30,16 +30,16 @@ function prettyRuleName(name) {
   return name.replace(/^(\d+)/, (d) => [...d].map((c) => SUPERSCRIPT[c]).join(""));
 }
 
-// Aperçu de la mise en forme produite dans Word : label + parenthèse en gras,
+// Aperçu de la mise en forme produite dans Word : label seul en gras,
 // δ et J en italique (selon les paramètres), m/z en italique. Affichage seulement.
 function renderNmr(text) {
   let html = escapeHtml(text);
   if (state.settings?.bold_label !== false) {
     html = html.replace(
-      /([⁰¹²³⁴-⁹]+[A-Za-z]+(?:\{[^}]*\})?\s*(?:NMR|RMN)\s*\([^)]*\))/g,
+      /([⁰¹²³⁴-⁹]+[A-Za-z]+(?:\{[^}]*\})?\s*(?:NMR|RMN))(?=\s*\()/g,
       "<b>$1</b>"
     );
-    html = html.replace(/(HRMS(?: \([^)]*\))?)(?= m\/z)/g, "<b>$1</b>");
+    html = html.replace(/\bHRMS(?=(?: \([^)]*\))? m\/z)/g, "<b>HRMS</b>");
   }
   if (state.settings?.italic_delta !== false) {
     html = html.replace(/δ/g, "<i>δ</i>");

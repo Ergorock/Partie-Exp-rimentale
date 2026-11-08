@@ -52,7 +52,8 @@ def test_output_is_idempotent():
 def test_styles_label_bold_and_mz_italic():
     result = RULE.apply("HRMS (ESI-TOF) m/z: [M+H]+ calcd for C10H13O2 165.0910, found 165.0912.")
     assert [s.text for s in result.segments if s.italic] == ["m/z"]
-    assert [s.text for s in result.segments if s.bold] == ["HRMS (ESI-TOF)"]
+    assert [s.text for s in result.segments if s.bold] == ["HRMS"]
+    assert result.segments[1].text == " (ESI-TOF) " and not result.segments[1].bold
     assert "".join(s.text for s in result.segments) == result.new_text
 
 

@@ -190,7 +190,8 @@ tests.
   **J en italique** (`italic_j`, configurable) : seule la mise en forme change.
 - **Signe moins** : `-`, `−` (U+2212) et `–` (U+2013) acceptés devant un
   déplacement ; le signe est conservé tel qu'écrit.
-- **Label + parenthèse en gras** (configurable).
+- **Label seul en gras** (`¹H NMR`, `HRMS`), jamais la parenthèse qui suit
+  (configurable : `bold_label`).
 - **Tri des signaux** du plus grand au plus petit (configurable : `desc` /
   `asc` / `none`), **mais règle de sûreté** : si un seul signal n'est pas
   parsable, la liste des signaux est conservée TELLE QUELLE (ni tri ni
@@ -220,7 +221,7 @@ tests.
 ### HRMS (`core/rules/hrms.py`, `tests/test_rule_hrms.py`)
 
 - Format cible : `HRMS (ESI-TOF) m/z: [M + H]⁺ Calcd for C₁₀H₁₃O₂ 165.0910;
-  Found 165.0912.` Label + méthode en gras (`bold_label`), `m/z` en italique,
+  Found 165.0912.` Label `HRMS` seul en gras (`bold_label`), `m/z` en italique,
   ion normalisé et placé avant `Calcd for`, formule en indices Unicode.
 - **Les masses ne sont JAMAIS modifiées** (ni arrondies, ni corrigées). La
   masse calculée est recalculée (`mass.py`) : formule de l'ion OU formule

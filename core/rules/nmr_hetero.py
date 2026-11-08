@@ -1,7 +1,7 @@
 """Règles de standardisation des sections RMN hétéronucléaires (``19F``, ``31P``).
 
 Même format que ``1H NMR`` / ``13C NMR`` (exposant Unicode, gras sur le label
-+ la parenthèse, δ en italique), avec découplage optionnel conservé
+seul, δ en italique), avec découplage optionnel conservé
 (``19F{1H} NMR`` -> ``¹⁹F{¹H} NMR``). Les signaux suivent le format générique :
 déplacement, puis multiplicité, J, intégration (``3F``) et attribution entre
 parenthèses. Toute la logique de section est dans ``nmr_section``.
@@ -18,8 +18,8 @@ class NineteenFNmrRule(NmrSectionRule):
 
     name = "19F NMR"
     description = (
-        "Format stylisé : label ¹⁹F (ou ¹⁹F{¹H}) exposant Unicode et parenthèse "
-        "(MHz, solvant, K) en gras, δ en italique, signaux triés du plus grand "
+        "Format stylisé : label ¹⁹F (ou ¹⁹F{¹H}) exposant Unicode en gras, "
+        "parenthèse (MHz, solvant, K), δ en italique, signaux triés du plus grand "
         "au plus petit (si tous parsables)."
     )
     nucleus = "19F"
@@ -33,8 +33,8 @@ class ThirtyOnePNmrRule(NmrSectionRule):
 
     name = "31P NMR"
     description = (
-        "Format stylisé : label ³¹P (ou ³¹P{¹H}) exposant Unicode et parenthèse "
-        "(MHz, solvant, K) en gras, δ en italique, signaux triés du plus grand "
+        "Format stylisé : label ³¹P (ou ³¹P{¹H}) exposant Unicode en gras, "
+        "parenthèse (MHz, solvant, K), δ en italique, signaux triés du plus grand "
         "au plus petit (si tous parsables)."
     )
     nucleus = "31P"

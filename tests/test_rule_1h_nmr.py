@@ -31,10 +31,11 @@ def test_styled_output_has_bold_label_and_italic_delta():
     text = "1H NMR (400 MHz, CDCl3, 298 K) δ 7.98 (d, J = 8.2 Hz, 2H)"
     result = RULE.apply(text)
     assert result.is_styled is True
-    # Un segment en gras (label + parenthèse) et un segment δ en italique.
-    bold = [s for s in result.segments if s.bold]
+    # Seul le label est en gras (pas la parenthèse) ; δ en italique.
+    bold = [s.text for s in result.segments if s.bold]
     italic = [s for s in result.segments if s.italic]
-    assert bold and "NMR" in bold[0].text
+    assert bold == ["¹H NMR"]
+    assert result.segments[1].text == " (400 MHz, CDCl₃, 298 K)"
     assert italic and italic[0].text == "δ"
 
 
