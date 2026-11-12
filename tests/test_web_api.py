@@ -46,9 +46,16 @@ def _docx(tmp_path, *paragraphs, name="in.docx"):
 
 def test_initial_state_lists_rules_and_settings():
     state = Api(FakeDialogs()).get_state()
-    assert [r["name"] for r in state["rules"]] == ["1H NMR", "13C NMR", "19F NMR", "31P NMR", "HRMS"]
+    assert [r["name"] for r in state["rules"]] == ["1H NMR", "13C NMR", "19F NMR", "31P NMR", "11B NMR", "29Si NMR", "HRMS", "IR", "Rf", "m.p. / b.p.", "Unités", "Ordre des analyses"]
     assert state["settings"]["sort_order"] == "desc"
     assert state["defaults"] == cfg.config_to_dict(RmnConfig())
+    assert state["settings"]["solvents"]["dmso-d6"] == "DMSO-*d*6"
+
+
+def test_save_settings_roundtrips_custom_solvents():
+    saved = Api(FakeDialogs()).save_settings({"solvents": {"DMSO D6": "DMSO-*d*6"}})
+    assert saved["solvents"] == {"dmso d6": "DMSO-*d*6"}
+    assert cfg.load_config().solvents == {"dmso d6": "DMSO-*d*6"}
 
 
 # --- Choix des fichiers ---------------------------------------------------------
@@ -144,6 +151,7 @@ def test_save_settings_writes_applies_and_normalizes():
         }
     )
     assert saved["multiplicities"] == {"td": "td", "s": "s"}
+    assert saved["solvents"] == cfg.config_to_dict(RmnConfig())["solvents"]  # absent -> défauts
     assert saved["sort_order"] == "desc"  # valeur invalide -> défaut
     assert cfg.get_config().temperature_unit == "°C"
     assert cfg.load_config().bold_label is False
@@ -185,7 +193,7 @@ def test_dropped_path_reads_pywebview_full_path():
 
 # --- Évaluation -------------------------------------------------------------------
 
-CONFORM = "¹H NMR (400 MHz, CDCl₃, 298 K) δ 7.26 (s, 1H)"
+CONFORM = "¹H NMR (400 MHz, CDCl₃, 298 K) δ (ppm) = 7.26 (s, 1\xa0H)"
 
 
 def test_evaluate_returns_score_grade_and_issues(tmp_path):

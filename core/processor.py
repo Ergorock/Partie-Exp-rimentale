@@ -218,14 +218,31 @@ def available_rules() -> List:
     from core.rules.nmr_1h import OneHNmrRule
     from core.rules.nmr_13c import ThirteenCNmrRule
     from core.rules.hrms import HrmsRule
-    from core.rules.nmr_hetero import NineteenFNmrRule, ThirtyOnePNmrRule
+    from core.rules.ir import IrRule
+    from core.rules.melting_point import MeltingPointRule
+    from core.rules.analysis_order import AnalysisOrderRule
+    from core.rules.units import UnitsRule
+    from core.rules.rf import RfRule
+    from core.rules.nmr_hetero import (
+        ElevenBNmrRule,
+        NineteenFNmrRule,
+        ThirtyOnePNmrRule,
+        TwentyNineSiNmrRule,
+    )
 
     return [
         OneHNmrRule(),
         ThirteenCNmrRule(),
         NineteenFNmrRule(),
         ThirtyOnePNmrRule(),
+        ElevenBNmrRule(),
+        TwentyNineSiNmrRule(),
         HrmsRule(),
+        IrRule(),
+        RfRule(),
+        MeltingPointRule(),
+        UnitsRule(),
+        AnalysisOrderRule(),
     ]
 
 

@@ -100,8 +100,8 @@ MULTI = (
     "13C NMR (101 MHz, CDCl3, 298 K) δ 20.1, 130.5"
 )
 MULTI_EXPECTED = (
-    "¹H NMR (400 MHz, CDCl₃, 298 K) δ 7.2 (s, 1H), 1.2 (s, 3H) "
-    "¹³C NMR (101 MHz, CDCl₃, 298 K) δ 130.5, 20.1"
+    "¹H NMR (400 MHz, CDCl₃, 298 K) δ (ppm) = 7.2 (s, 1\xa0H), 1.2 (s, 3\xa0H) "
+    "¹³C NMR (101 MHz, CDCl₃, 298 K) δ (ppm) = 130.5, 20.1"
 )
 
 
@@ -121,12 +121,12 @@ def test_collated_13c_section_is_processed_in_document():
 
 def test_paragraph_with_prefix_is_processed():
     pr = _process_one("Compound 3: 1H NMR (400 MHz, CDCl3, 298 K) δ 7.26 (s, 1H)")
-    assert pr.new_text == "Compound 3: ¹H NMR (400 MHz, CDCl₃, 298 K) δ 7.26 (s, 1H)"
+    assert pr.new_text == "Compound 3: ¹H NMR (400 MHz, CDCl₃, 298 K) δ (ppm) = 7.26 (s, 1\xa0H)"
 
 
 def test_leading_space_is_processed_not_flagged():
     result = RULE_1H.apply(" 1H NMR (400 MHz, CDCl3, 298 K) δ 7.26 (s, 1H)")
-    assert result.new_text == " ¹H NMR (400 MHz, CDCl₃, 298 K) δ 7.26 (s, 1H)"
+    assert result.new_text == " ¹H NMR (400 MHz, CDCl₃, 298 K) δ (ppm) = 7.26 (s, 1\xa0H)"
     assert not _flagged(result)
 
 
@@ -170,20 +170,20 @@ def test_prose_between_label_and_parenthesis_is_not_dropped():
 def test_unknown_multiplicity_is_flagged_and_kept():
     body = "7.26 (ddq, J = 7.5 Hz, 1H), 1.20 (t, 3H)"
     result = RULE_1H.apply(f"1H NMR (400 MHz, CDCl3, 298 K) δ {body}")
-    assert result.new_text.endswith(f"δ {body}")
+    assert result.new_text.endswith(f"δ (ppm) = {body}")
     assert _flagged(result)
 
 
 def test_unknown_field_before_known_one_is_flagged():
     body = "7.26 (d, 2.0 Hz, 1H)"
     result = RULE_1H.apply(f"1H NMR (400 MHz, CDCl3, 298 K) δ {body}")
-    assert result.new_text.endswith(f"δ {body}")
+    assert result.new_text.endswith(f"δ (ppm) = {body}")
     assert _flagged(result)
 
 
 def test_multiple_j_values_in_one_field():
     result = RULE_1H.apply("1H NMR (400 MHz, CDCl3, 298 K) δ 7.26 (dd, J = 8.4, 2.1 Hz, 1H)")
-    assert result.new_text.endswith("δ 7.26 (dd, J = 8.4, 2.1 Hz, 1H)")
+    assert result.new_text.endswith("δ (ppm) = 7.26 (dd, J = 8.4, 2.1 Hz, 1\xa0H)")
     assert not _flagged(result)
 
 
@@ -191,13 +191,13 @@ def test_multiple_j_fields():
     result = RULE_1H.apply(
         "1H NMR (400 MHz, CDCl3, 298 K) δ 7.26 (dd, J = 8.4 Hz, J = 2.1 Hz, 1H)"
     )
-    assert result.new_text.endswith("δ 7.26 (dd, J = 8.4 Hz, J = 2.1 Hz, 1H)")
+    assert result.new_text.endswith("δ (ppm) = 7.26 (dd, J = 8.4 Hz, J = 2.1 Hz, 1\xa0H)")
     assert not _flagged(result)
 
 
 def test_13c_attribution_still_accepted():
     result = RULE_13C.apply("13C NMR (101 MHz, CDCl3, 298 K) δ 21.7 (CH3), 140.2 (Cq)")
-    assert result.new_text.endswith("δ 140.2 (Cq), 21.7 (CH₃)")
+    assert result.new_text.endswith("δ (ppm) = 140.2 (Cq), 21.7 (CH₃)")
     assert not _flagged(result)
 
 

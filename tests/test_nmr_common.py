@@ -143,7 +143,7 @@ def test_sort_signals_no_reorder_when_not_parsable():
 
 def test_format_signal_1h():
     signals, _ = nc.parse_signals("7.98 (d, J = 8.2 Hz, 2H, Ar-H)")
-    assert nc.format_signal_1h(signals[0]) == "7.98 (d, J = 8.2 Hz, 2H, Ar-H)"
+    assert nc.format_signal_1h(signals[0]) == "7.98 (d, J = 8.2 Hz, 2\xa0H; Ar-H)"
 
 
 def test_format_signal_13c_with_attribution():

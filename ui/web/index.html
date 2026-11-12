@@ -36,8 +36,13 @@
       </section>
 
       <section class="field">
-        <h2>Règles</h2>
-        <div id="rules" class="rules"></div>
+        <details class="rules-fold">
+          <summary>
+            <h2>Règles</h2>
+            <span class="rules-count" id="rules-count"></span>
+          </summary>
+          <div id="rules" class="rules"></div>
+        </details>
         <label class="check">
           <input type="checkbox" id="annotate" checked>
           <span>Commenter dans Word les paragraphes à vérifier</span>
@@ -66,6 +71,11 @@
           <button type="button" data-filter="review" aria-pressed="true" id="filter-review"></button>
           <button type="button" data-filter="all" aria-pressed="false" id="filter-all"></button>
         </div>
+        <p class="legend" aria-label="Légende des couleurs">
+          <span class="l-fix"><i></i>Texte corrigé automatiquement</span>
+          <span class="l-flag"><i></i>Passage à vérifier</span>
+          <span class="l-mark"><i></i>Marqueur inséré (donnée manquante)</span>
+        </p>
         <ol class="entries" id="entries"></ol>
       </div>
 
@@ -111,6 +121,18 @@
         <button type="button" class="link" id="add-mult">Ajouter une multiplicité</button>
       </fieldset>
 
+      <fieldset>
+        <legend>Solvants RMN</legend>
+        <p class="hint">À gauche ce qui est écrit dans le document (sans tenir compte de la casse), à droite ce qui sera écrit à la place. Entourez de * le texte à mettre en italique (DMSO-*d*6) ; les indices des chiffres sont ajoutés automatiquement. Un solvant absent de cette liste est signalé sans être remplacé.</p>
+        <div class="mult-scroll">
+          <table class="mult">
+            <thead><tr><th scope="col">Écrit</th><th scope="col">Devient</th><th><span class="sr">Retirer</span></th></tr></thead>
+            <tbody id="solvent-rows"></tbody>
+          </table>
+        </div>
+        <button type="button" class="link" id="add-solvent">Ajouter un solvant</button>
+      </fieldset>
+
       <fieldset class="grid">
         <legend>Mise en forme</legend>
         <label for="sort-order">Ordre des signaux</label>
@@ -132,12 +154,18 @@
         <label for="hrms-ppm">Écart HRMS toléré (ppm)</label>
         <input type="number" id="hrms-ppm" min="0.1" step="0.1">
 
+        <label for="hrms-abs">Écart HRMS absolu toléré (Da)</label>
+        <input type="number" id="hrms-abs" min="0.0001" step="0.001">
+
         <span></span>
         <label class="check"><input type="checkbox" id="bold-label"><span>Label en gras</span></label>
         <span></span>
         <label class="check"><input type="checkbox" id="italic-delta"><span>δ en italique</span></label>
         <span></span>
         <label class="check"><input type="checkbox" id="italic-j"><span>J en italique</span></label>
+
+        <span></span>
+        <label class="check"><input type="checkbox" id="check-temperature"><span>Contrôler la température (marqueur si absente, unité)</span></label>
       </fieldset>
 
       <fieldset class="grid">

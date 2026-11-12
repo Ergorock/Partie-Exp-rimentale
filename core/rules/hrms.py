@@ -16,7 +16,11 @@ Les masses ne sont JAMAIS modifiées. La règle les vérifie seulement :
   OU formule neutre + ion, avec ou sans la masse de l'électron) ; incohérente
   -> FLAGGED avec la valeur attendue ;
 - l'écart masse trouvée / calculée au-delà de ``config.hrms_ppm_tolerance``
-  ppm -> FLAGGED.
+  ppm -> FLAGGED ;
+- l'écart absolu au-delà de ``config.hrms_abs_tolerance`` (0.003 Da, en plus
+  des ppm) -> FLAGGED ;
+- masse calculée < 500 : 4 décimales attendues (calculée et trouvée) sinon
+  FLAGGED (valeurs conservées).
 
 Une entrée dont la structure n'est pas reconnue (virgule décimale, ordre
 inhabituel, texte inconnu…) est laissée telle quelle et signalée.
@@ -30,6 +34,10 @@ from typing import List, Optional, Tuple
 from core.config import get_config
 from core.rules import mass, nmr_common
 from core.rules.base import Action, ActionKind, Rule, RuleResult, StyledSegment
+
+# Quatre décimales exigées pour les composés de faible masse (< 500).
+_LOW_MASS_LIMIT = 500.0
+_LOW_MASS_DECIMALS = 4
 
 _SUPERSCRIPT_DIGITS = "⁰¹²³⁴⁵⁶⁷⁸⁹"
 _TO_ASCII = str.maketrans(_SUPERSCRIPT_DIGITS + "₀₁₂₃₄₅₆₇₈₉", "0123456789" * 2)
@@ -219,7 +227,10 @@ class HrmsRule(Rule):
             formula += "\u207a" if fcharge in _PLUS else "\u207b"
 
         calcd, found = entry.group("calcd"), entry.group("found")
-        flags += self._check(formula_ascii, ion, calcd, found, config.hrms_ppm_tolerance)
+        flags += self._check(
+            formula_ascii, ion, calcd, found,
+            config.hrms_ppm_tolerance, config.hrms_abs_tolerance,
+        )
 
         body = (
             (f"{ion.text()} " if ion else "")
@@ -235,7 +246,10 @@ class HrmsRule(Rule):
         start, end = entry.span()
         new_segment = "".join(s.text for s in segments)
         new_text = paragraph_text[:start] + new_segment + paragraph_text[end:]
-        actions = [Action(ActionKind.FLAGGED, f, self.name) for f in flags]
+        actions = [
+            Action(ActionKind.FLAGGED, f, self.name, self._highlights(f, calcd, found, new_segment))
+            for f in flags
+        ]
         if new_text == paragraph_text:
             return RuleResult(
                 new_text=paragraph_text,
@@ -250,13 +264,41 @@ class HrmsRule(Rule):
         )
 
     @staticmethod
+    def _highlights(message: str, calcd: str, found: str, entry: str) -> tuple:
+        """Extraits à surligner pour un signalement (affichage seulement)."""
+        if message.startswith("Nombre de décimales"):
+            return (calcd, found)
+        if message.startswith("Masse calculée"):
+            return (calcd,)
+        if message.startswith(("Écart", "Formule non calculable")):
+            return (found,) if message.startswith("Écart") else (calcd,)
+        return (entry,)
+
+    @staticmethod
     def _check(
-        formula: str, ion: Optional[_Ion], calcd: str, found: str, tolerance: float
+        formula: str,
+        ion: Optional[_Ion],
+        calcd: str,
+        found: str,
+        tolerance: float,
+        abs_tolerance: float = 0.003,
     ) -> List[str]:
-        """Vérifie la masse calculée et l'écart en ppm (messages FLAGGED)."""
+        """Vérifie décimales, masse calculée et écarts ppm / absolu (FLAGGED)."""
         flags: List[str] = []
         calcd_value, found_value = float(calcd), float(found)
         decimals = len(calcd.split(".")[1])
+        if calcd_value < _LOW_MASS_LIMIT:
+            wrong = [
+                f"{label} {value} ({len(value.split('.')[1])})"
+                for label, value in (("calculée", calcd), ("trouvée", found))
+                if len(value.split(".")[1]) != _LOW_MASS_DECIMALS
+            ]
+            if wrong:
+                flags.append(
+                    "Nombre de décimales de la masse inattendu : "
+                    f"{', '.join(wrong)} ; {_LOW_MASS_DECIMALS} attendues pour une "
+                    f"masse inférieure à {_LOW_MASS_LIMIT:g}, valeur conservée."
+                )
         candidates = _candidates(formula, ion)
         if candidates is None:
             flags.append(
@@ -283,5 +325,13 @@ class HrmsRule(Rule):
                 "Écart masse trouvée / calculée hors tolérance : "
                 f"{ppm:.1f} ppm (tolérance {tolerance:g} ppm), vérification "
                 "manuelle requise."
+            )
+        # Écart absolu (en Da) : tolérance de 0.003 d'usage dans la littérature.
+        gap = abs(found_value - calcd_value)
+        if gap > abs_tolerance + 1e-9:
+            flags.append(
+                "Écart absolu masse trouvée / calculée hors tolérance : "
+                f"{gap:.{max(decimals, 4)}f} Da (tolérance {abs_tolerance:g} Da), "
+                "vérification manuelle requise."
             )
         return flags

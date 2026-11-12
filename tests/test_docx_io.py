@@ -148,3 +148,26 @@ def test_apply_styled_edit_replaces_whole_paragraph_when_replaced_none():
 
     assert p.text == "nouveau"
     assert p.runs[0].italic is True
+
+
+def test_apply_styled_edit_subscript_segment_only():
+    p = _para_with_runs([("Rf", None, None)])
+    segments = [
+        StyledSegment("R", bold=True),
+        StyledSegment("f", bold=True, subscript=True),
+    ]
+    docx_io.apply_styled_edit(p, "Rf", "Rf", None, segments)
+    by_text = {r.text: r for r in p.runs}
+    assert by_text["f"].font.subscript is True
+    assert not by_text["R"].font.subscript
+
+
+def test_subscript_replaces_inherited_vertical_alignment():
+    # Le style de base est nettoyé : un run de base en exposant ne contamine pas.
+    p = _para_with_runs([("X", None, None)])
+    p.runs[0].font.superscript = True
+    docx_io.apply_styled_edit(p, "X", "AB", None,
+                              [StyledSegment("A"), StyledSegment("B", subscript=True)])
+    by_text = {r.text: r for r in p.runs}
+    assert not by_text["A"].font.superscript and not by_text["A"].font.subscript
+    assert by_text["B"].font.subscript is True and not by_text["B"].font.superscript

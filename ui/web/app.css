@@ -14,6 +14,11 @@
   --ok: #2e7d5b;
   --review: #9a5b00;
   --review-bg: #fff3dc;
+  --fix: #1f6f4a;
+  --fix-bg: #e2f4ea;
+  --hl-fix: #b9e6c9;
+  --hl-flag: #ffd98a;
+  --hl-mark: #dccdf6;
   --marker: #6a42b0;
   --marker-bg: #f2edfb;
   --danger: #b3261e;
@@ -41,6 +46,11 @@
     --ok: #6cc39a;
     --review: #f0b456;
     --review-bg: #3a2c12;
+    --fix: #6cc39a;
+    --fix-bg: #16301f;
+    --hl-fix: #1f5c3b;
+    --hl-flag: #7a5413;
+    --hl-mark: #54398f;
     --marker: #b99cf0;
     --marker-bg: #2b2140;
     --danger: #ff8a80;
@@ -153,6 +163,27 @@ button.link {
 .check { display: flex; gap: 0.55rem; align-items: flex-start; cursor: pointer; }
 .check input { margin-top: 0.25rem; accent-color: var(--accent); }
 .rule-name { font-family: var(--science); font-size: var(--step-1); line-height: 1.2; }
+
+/* Section « Règles » repliable (<details>). */
+details.rules-fold { margin-bottom: 0.9rem; }
+details.rules-fold > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+details.rules-fold > summary::-webkit-details-marker { display: none; }
+details.rules-fold > summary::before {
+  content: "▸";
+  color: var(--muted);
+  font-size: var(--step--1);
+  transition: transform 0.12s;
+}
+details.rules-fold[open] > summary::before { transform: rotate(90deg); }
+details.rules-fold > summary h2 { margin: 0; }
+.rules-count { color: var(--muted); font-size: var(--step--1); }
+details.rules-fold .rules { margin: 0.6rem 0 0; }
 .rule-desc { display: block; color: var(--muted); font-size: var(--step--1); }
 
 .error { color: var(--danger); font-size: var(--step--1); }
@@ -213,7 +244,47 @@ button.link {
 .entry details { margin-top: 0.5rem; font-size: var(--step--1); color: var(--muted); }
 .entry summary { cursor: pointer; width: fit-content; }
 .entry .before { font-family: var(--science); font-size: var(--step-0); margin-top: 0.35rem; overflow-wrap: anywhere; }
-.entry .fixes { margin: 0.35rem 0 0; padding-left: 1.1rem; }
+.entry .fixes { list-style: none; margin: 0.35rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; }
+/* Un surlignage par cas : vert = corrigé automatiquement, ambre = à vérifier,
+   violet = marqueur inséré pour une donnée manquante. */
+.entry .fixes li {
+  border-left: 3px solid var(--fix);
+  background: var(--fix-bg);
+  color: var(--ink);
+  border-radius: 0 6px 6px 0;
+  padding: 0.3rem 0.6rem;
+}
+.entry-where::before {
+  content: "";
+  display: inline-block;
+  width: 0.6rem;
+  height: 0.6rem;
+  margin-right: 0.45rem;
+  border-radius: 50%;
+  background: var(--rule);
+  vertical-align: baseline;
+}
+.entry.is-ok .entry-where::before { background: var(--ok); }
+.entry.is-fixed .entry-where::before { background: var(--fix); }
+.entry.is-flagged .entry-where::before { background: var(--review); }
+.entry.is-placeholder .entry-where::before { background: var(--marker); }
+/* Surlignage dans le texte (core/highlights.py) : un fond par cas. */
+mark.hl {
+  color: inherit;
+  padding: 0.05em 0;
+  border-radius: 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+mark.hl-corrected { background: var(--hl-fix); }
+mark.hl-flagged { background: var(--hl-flag); }
+mark.hl-placeholder { background: var(--hl-mark); }
+.legend { display: flex; flex-wrap: wrap; gap: 0.5rem 0.9rem; margin: 0.25rem 0 0.75rem; font-size: var(--step--1); color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+.legend i { width: 0.9rem; height: 0.9rem; border-radius: 3px; border: 1px solid transparent; }
+.legend .l-fix i { background: var(--hl-fix); border-color: var(--fix); }
+.legend .l-flag i { background: var(--hl-flag); border-color: var(--review); }
+.legend .l-mark i { background: var(--hl-mark); border-color: var(--marker); }
 
 .notes { display: flex; flex-direction: column; gap: 0.5rem; }
 .note {
@@ -387,7 +458,15 @@ table.eval-rules td.bar .fill {
   padding: 0.45rem 0;
   border-top: 1px solid var(--rule);
 }
-.issue-kind { font-size: var(--step--1); font-weight: 600; color: var(--muted); }
-.issue.flagged .issue-kind { color: var(--review); }
-.issue.placeholder .issue-kind { color: var(--marker); }
+.issue-kind {
+  font-size: var(--step--1);
+  font-weight: 600;
+  color: var(--muted);
+  width: fit-content;
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
+}
+.issue.corrected .issue-kind { color: var(--fix); background: var(--fix-bg); }
+.issue.flagged .issue-kind { color: var(--review); background: var(--review-bg); }
+.issue.placeholder .issue-kind { color: var(--marker); background: var(--marker-bg); }
 .rule-tag { font-family: var(--science); margin-right: 0.35rem; color: var(--muted); }

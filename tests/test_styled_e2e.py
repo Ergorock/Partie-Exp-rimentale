@@ -29,3 +29,17 @@ def test_styled_docx_output_has_bold_and_italic_runs(tmp_path):
     assert any(r.bold is True for r in runs), "Au moins un run doit être gras"
     assert any(r.italic is True for r in runs), "Au moins un run doit être italique"
 
+
+def test_ir_docx_only_label_is_bold(tmp_path):
+    doc = NewDocument()
+    doc.add_paragraph("IR (ATR) 1715, 3420 cm-1")
+    src = os.path.join(tmp_path, "in.docx")
+    out = os.path.join(tmp_path, "out.docx")
+    doc.save(src)
+
+    processor.standardize_file(src, out)
+
+    paragraph = docx_io.load(out).paragraphs[0]
+    assert paragraph.text == "IR (ATR): ν\u0303(cm⁻¹) = 3420, 1715"
+    assert "".join(r.text for r in paragraph.runs if r.bold) == "IR"
+    assert not any(r.italic for r in paragraph.runs)

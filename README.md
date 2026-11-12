@@ -4,8 +4,8 @@ Outil pour standardiser le formatage d'une partie expérimentale contenue dans
 un fichier Word (`.docx`). On charge un `.docx` mal formaté et on récupère un
 `.docx` corrigé, accompagné d'un rapport des corrections.
 
-Quatre règles RMN (`1H NMR`, `13C NMR`, `19F NMR`, `31P NMR`) et une règle
-`HRMS` sont disponibles ; elles produisent une
+Six règles RMN (`1H NMR`, `13C NMR`, `19F NMR`, `31P NMR`, `11B NMR`, `29Si NMR`) et les règles
+`HRMS`, `IR`, `Rf` et `m.p. / b.p.`, `Unités` et `Ordre des analyses` sont disponibles ; elles produisent une
 sortie **stylisée** (gras / italique, exposants et indices Unicode). D'autres
 règles (HRMS, IR…) peuvent être ajoutées facilement grâce à l'architecture
 modulaire (voir plus bas).
@@ -26,8 +26,9 @@ ajoute seulement l'exposant Unicode au nombre de masse (`1H` → `¹H`,
 La parenthèse contient exactement **trois éléments** séparés par deux virgules :
 
 1. la **fréquence** en MHz (ex. `400.18 MHz`) ;
-2. le **solvant**, avec indices en Unicode (ex. `CDCl3` → `CDCl₃`,
-   `DMF-d7` → `DMF-d₇`) ;
+2. le **solvant**, remplacé d'après la table des solvants (voir
+   « Solvants configurables ») avec indices en Unicode (ex. `CDCl3` →
+   `CDCl₃`, `dmso d6` → `DMSO-d₆` avec le *d* en italique) ;
 3. la **température** en Kelvin (ex. `298 K`).
 
 Corrections automatiques appliquées sur la parenthèse :
@@ -42,11 +43,39 @@ Si la température est **absente** ou illisible, un marqueur visible `[??? K]`
 est inséré. Si la parenthèse est absente ou trop incomplète, le paragraphe est
 **signalé** sans correction.
 
+### Solvants configurables
+
+Le solvant (2ᵉ élément de la parenthèse des sections RMN : `1H`, `13C`, `19F`,
+`31P`, `11B`, `29Si`) est cherché dans une table **Solvants RMN** des
+Paramètres : « écrit dans le document » → « devient ». La correspondance porte
+sur l'élément entier, sans tenir compte de la casse ni des espaces multiples
+(`dmso  D6` = `DMSO-d6`). Dans « devient », entourez de `*` le texte à mettre
+**en italique** (`DMSO-*d*6` → `DMSO-d₆` avec le *d* en italique) ; les indices
+Unicode sont ajoutés automatiquement après une lettre ou une parenthèse
+fermante. Une valeur au balisage `*` non apparié est ignorée (l'entrée est
+recopiée).
+
+- **Solvant absent de la table** : indices automatiques comme avant, mais le
+  texte n'est pas remplacé et un signalement « Solvant absent de la table »
+  est émis. En **mode évaluation**, un solvant inconnu rend donc la section
+  « à vérifier » (le score peut baisser tant que la table est incomplète).
+- La table par défaut couvre `CDCl3`, `DMSO-d6` (+ `DMSO d6`, `d6-DMSO`,
+  `(CD3)2SO`), `CD3OD` (+ `MeOD`), `C6D6`, `acetone-d6`, `D2O`, `CD3CN`,
+  `CD2Cl2`, `THF-d8`, `pyridine-d5`, `toluene-d8`, `CD3COOH`, `CD3COOD`,
+  `TFA-d`.
+- Un utilisateur qui a déjà enregistré ses paramètres reçoit cette table par
+  défaut (le champ était absent de son fichier) ; ses modifications ultérieures
+  sont conservées. **Rétablir les valeurs par défaut** recharge la table
+  d'origine.
+- Limite : si le texte du paragraphe est déjà conforme, le document n'est pas
+  réécrit ; un *d* non mis en italique dans Word n'est alors pas corrigé.
+
 ### Symbole δ (en italique)
 
-Le symbole δ qui précède la liste des signaux est écrit **en italique**. Les
-variantes d'entrée (`δ`, `ẟ`, éventuellement suivies de `(ppm) =`) sont
-normalisées en un `δ` italique standard. Le symbole `J` des constantes de
+Le symbole δ qui précède la liste des signaux est écrit **en italique** et
+suivi de `(ppm) =` en style normal (`δ (ppm) = 7.26 (s, 1 H)`, forme du guide
+LCMCE). Les variantes d'entrée (`δ`, `ẟ`, avec ou sans `(ppm) =`) sont
+normalisées en cette forme. Le symbole `J` des constantes de
 couplage (`J = 8.4 Hz`) est lui aussi mis en italique (désactivable).
 
 ### Exposants et indices Unicode
@@ -91,12 +120,15 @@ décimale (`7,26`). Un point ou point-virgule final après la liste est conserv�
 ## Format cible `1H NMR`
 
 ```
-¹H NMR (<fréquence> MHz, <solvant>, <température> K) δ <signaux>
+¹H NMR (<fréquence> MHz, <solvant>, <température> K) δ (ppm) = <signaux>
 ```
 
 Pour chaque signal, l'ordre est : déplacement chimique (valeur unique ou plage
-`a–b`) → multiplicité → `J = x.x Hz` (une décimale, si présente) → intégration →
-attribution (optionnelle). Multiplicités autorisées par défaut : simples
+`a – b`, tiret demi-cadratin entouré d'espaces insécables) → multiplicité →
+`J = x.x Hz` (une décimale, si présente) → intégration (`5 H`, avec espace
+insécable) ; les données sont suivies, après un point-virgule, de l'attribution
+(`m, 5 H; OCH₂`). Le point-virgule est aussi reconnu en entrée ; l'attribution
+reste optionnelle. Multiplicités autorisées par défaut : simples
 (`s`, `d`, `t`, `q`, `quint`, `sext`, `sept`, `hept`, `septic`, `m`), composées
 (`dd`, `dt`, `td`, `tt`, `dq`, `qd`, `ddd`, `ddt`, `dtd`, `tdd`, `dddd`, `qt`,
 `tq`), larges (`br s`, `br d`…, avec `bs`/`bd`/`br. s` normalisés en `br x`) et
@@ -122,7 +154,7 @@ hypertexte, champ…) n'est pas modifié et est signalé.
 ## Format cible `13C NMR`
 
 ```
-¹³C NMR (<fréquence> MHz, <solvant>, <température> K) δ <signaux>
+¹³C NMR (<fréquence> MHz, <solvant>, <température> K) δ (ppm) = <signaux>
 ```
 
 La règle reconnaît en entrée aussi bien `13C NMR` que `13C RMN`, ainsi que la
@@ -135,12 +167,63 @@ couplage est présent (ex. `162.3 (d, J = 245 Hz)` pour un couplage C–F).
 ## Formats cibles `19F NMR` et `31P NMR`
 
 ```
-¹⁹F{¹H} NMR (<fréquence> MHz, <solvant>, <température> K) δ <signaux>
-³¹P{¹H} NMR (<fréquence> MHz, <solvant>, <température> K) δ <signaux>
+¹⁹F{¹H} NMR (<fréquence> MHz, <solvant>, <température> K) δ (ppm) = <signaux>
+³¹P{¹H} NMR (<fréquence> MHz, <solvant>, <température> K) δ (ppm) = <signaux>
 ```
 
 Même traitement que `1H NMR` (parenthèse, δ, tri, règle de sûreté), avec
-découplage `{1H}` optionnel conservé ; intégration acceptée (`3F`).
+découplage `{1H}` optionnel conservé ; intégration acceptée (`3 F`).
+
+## Contrôle du nombre de décimales (RMN)
+
+Les valeurs ne sont jamais arrondies ni corrigées ; un nombre de décimales
+inattendu est seulement **signalé** (à vérifier), pour les signaux analysés :
+
+- déplacement δ : 2 décimales pour le `1H` (3 tolérées, cas ambigu), 1 décimale
+  pour `13C`, `19F`, `31P` (2 tolérées) ; les deux bornes d'une plage sont
+  contrôlées ;
+- constante de couplage `J` : 1 décimale.
+
+Une liste de signaux non analysable n'est pas contrôlée (elle est déjà
+signalée).
+
+## Formats cibles `11B NMR` et `29Si NMR`
+
+```
+¹¹B NMR (<fréquence> MHz, <solvant>, <température> K) δ (ppm) = <signaux>
+²⁹Si{¹H} NMR (<fréquence> MHz, <solvant>, <température> K) δ (ppm) = <signaux>
+```
+
+Même traitement que `31P NMR` (parenthèse, δ, tri, règle de sûreté, découplage
+`{1H}` optionnel). δ s'écrit avec 1 décimale (2 tolérées). La largeur à
+mi-hauteur des pics larges du `11B` (en Hz) n'est pas reconnue : un champ
+inconnu rend le signal non analysable, la liste est alors laissée telle quelle
+et signalée.
+
+## Règle `Unités`
+
+Pose une **espace insécable** entre un nombre et son unité dans la procédure :
+`220 mg`, `0.9 mmol`, `6.3 mL`, `12 min`, `2 h`, `77 %`, `25 °C` ; `10 mol %`
+devient `10 mol%` (le `%` est collé) et `ºC` / `˚C` deviennent `°C`. Seule la
+forme change : aucun nombre, aucune unité ajoutée.
+
+- Les unités d'une lettre (`g`, `h`, `L`, `M`) ne sont traitées que si une
+  espace est déjà écrite (`5g` peut être le composé 5g) ; une espace fine
+  insécable (U+202F) déjà présente est conservée.
+- Le texte à partir du premier label d'analyse (RMN, HRMS, IR, Rf, m.p., b.p.)
+  est laissé aux règles d'analyse. Les `MHz`, `K` et `Hz` des parenthèses RMN
+  restent donc écrits avec une espace ordinaire.
+- Un rendement avec décimale dans `(843 mg, 77.5 %)` est signalé (0 décimale
+  attendue), sans modification.
+
+## Règle `Ordre des analyses`
+
+Contrôle, **dans un paragraphe**, l'ordre du guide LCMCE : Rf ; m.p./b.p. ;
+`1H` ; `13C` ; autres RMN ; IR ; UV/Vis ; MS ; HRMS ; analyse élémentaire. Un
+ordre différent est signalé (« 1H NMR après 13C NMR »), le texte n'est jamais
+déplacé. L'ordre entre paragraphes n'est pas contrôlé (on ne sait pas où un
+composé s'arrête) ; un paragraphe bien ordonné n'est pas compté en mode
+évaluation.
 
 ## Format cible `HRMS`
 
@@ -162,7 +245,10 @@ après la formule.
   la formule neutre (`C10H12O2`) combinée à l'ion, avec ou sans la masse de
   l'électron. Une valeur incohérente est signalée avec la valeur attendue ;
 - un écart masse trouvée / calculée supérieur à la tolérance (5 ppm par
-  défaut, paramétrable) est signalé ;
+  défaut, paramétrable) est signalé ; un écart absolu supérieur à 0.003 Da
+  (paramétrable) l'est aussi, indépendamment des ppm ;
+- pour une masse inférieure à 500, 4 décimales sont attendues (masses calculée
+  et trouvée) : un autre nombre de décimales est signalé, sans modification ;
 - un ion ou une méthode d'ionisation absents sont signalés ; un élément
   inconnu de la table rend la masse non vérifiable (signalé).
 
@@ -170,6 +256,83 @@ Une entrée dont la structure n'est pas reconnue (virgule décimale, ordre
 inhabituel…) est laissée telle quelle et signalée. Une simple mention de
 « HRMS » dans une phrase (sans `calcd` / `found`) est ignorée. Une section RMN
 collée devant une entrée HRMS s'arrête au label `HRMS`.
+
+## Format cible `IR`
+
+```
+IR (ATR): ν̃(cm⁻¹) = 3420, 1715, 1600
+```
+
+Label `IR` seul en gras. La méthode (`KBr`, `film`, `neat`, `ATR`, `CHCl3` →
+`CHCl₃`…) est recopiée entre parenthèses. Les bandes sont des **entiers**
+recopiés tels quels et triés du plus grand au plus petit (tri fixe) ;
+l'attribution ou l'intensité entre parenthèses est conservée
+(`1715 (C=O)`, `3420 (br)`). `ν̃` est ν + U+0303 et l'unité `cm⁻¹` est écrite en
+Unicode.
+
+Variantes d'entrée acceptées : symbole `νmax`, `ν`, `ν̃`, `vmax`, `v` ou aucun ;
+unité `cm-1`, `cm−1`, `cm^-1`, `cm⁻¹` en fin de liste, en tête (`νmax/cm-1`),
+entre parenthèses ou dans la parenthèse de la méthode (`IR (ATR, cm-1)`) ;
+séparateur `=` ou `:` optionnel ; ponctuation finale conservée.
+
+Une plage (OH des acides) est acceptée : `3300-2400 (m)` devient
+`3300 – 2400 (m)` (tiret demi-cadratin entouré d'espaces insécables) et est
+triée sur sa borne haute.
+
+Rien n'est jamais modifié ni arrondi. L'entrée est laissée telle quelle et
+signalée si la méthode est absente, si une bande est décimale (`1715.5`) ou
+écrite avec une virgule décimale, si du texte figure hors parenthèse ou si une
+parenthèse est imbriquée. Une section RMN ou HRMS collée devant une entrée IR
+s'arrête au label `IR`, et l'entrée IR s'arrête au label suivant.
+
+## Format cible `Rf`
+
+```
+Rf = 0.38 (SiO₂; heptane/CH₂Cl₂ 1:1)
+```
+
+Label `Rf` en gras, avec le **f en indice Word** (seule exception, avec `[α]D`
+et `tR` à venir, à la règle « indices en Unicode » : Unicode n'a pas d'indice
+pour cette lettre). La valeur est recopiée telle quelle ; la parenthèse donne la
+phase stationnaire puis l'éluant et ses proportions, avec indices Unicode
+(`CH2Cl2` → `CH₂Cl₂`).
+
+Variantes acceptées : `Rf:`, `Rf 0.35`, `R.f.`, `R_f`, parenthèse écrite avant
+la valeur (`Rf (hexane/EtOAc 9:1) = 0.35`, déplacée après), `,` après la phase
+stationnaire en tête (devenu `;`).
+
+Signalé sans rien modifier : valeur qui n'a pas 2 décimales, valeur hors de
+[0 ; 1], phase stationnaire absente, proportions de l'éluant absentes,
+parenthèse absente. Entrée laissée telle quelle et signalée : virgule décimale,
+plage (`0.3-0.4`), deux parenthèses. Seule la première entrée `Rf` d'un
+paragraphe est traitée. Si le texte est déjà conforme, le document n'est pas
+réécrit : un `f` non mis en indice dans Word n'est donc pas corrigé.
+
+## Format cible `m.p.` / `b.p.`
+
+```
+m.p. 185 – 186 °C (Et₂O/hexane; dec.; lit. [12] 185 – 187 °C)
+b.p. 80 °C (15 mmHg)
+```
+
+Même règle pour le point de fusion et le point d'ébullition. Label en gras
+(`mp`, `m.p.`, `Mp`, `melting point`… → `m.p.` ; `bp`, `b.p.`… → `b.p.`).
+Température entière ou plage (tiret demi-cadratin entouré d'espaces
+insécables), toujours en `°C` : `ºC`, `˚C`, `C` ou une unité absente deviennent
+`°C` (l'ajout est signalé) ; une température en kelvins n'est jamais
+convertie.
+
+La parenthèse suit un ordre imposé, éléments séparés par `; ` : solvant de
+recristallisation, pression, `dec.` (décomposition), `lit.` suivi d'une
+référence éventuelle `[12]` et de la valeur de la littérature. L'ordre d'entrée
+est rétabli (`(dec.)`, `décomp.`, `/ 15 mmHg`, `Et2O/hexane: [12] 185-187 °C`
+sont reconnus).
+
+Signalé sans rien modifier : valeur avec décimale (0 attendue), plage inversée
+(`130 – 128`). Entrée laissée telle quelle et signalée : kelvins, virgule
+décimale, deux solvants, élément en double. Tous les points de fusion et
+d'ébullition d'un paragraphe sont traités. Les labels français (`Pf`, `Tf`)
+ne sont pas reconnus.
 
 ## Installation
 
@@ -217,7 +380,12 @@ python app.py
    dans le document, avec les signalements en marge. Le filtre **À vérifier**
    (actif par défaut quand il y a des signalements) ne montre que ce qui demande
    une intervention ; **Tous** montre aussi les lignes corrigées
-   automatiquement. **Ouvrir dans Word** ouvre le fichier produit.
+   automatiquement. Les cas sont **surlignés dans le texte**
+   (légende au-dessus de la liste) : **vert** = texte modifié par la
+   standardisation (une espace insécable ajoutée apparaît comme un petit bloc
+   vert), **ambre** = passage à vérifier (la valeur ou l'entrée en cause), **violet** =
+   marqueur inséré pour une donnée manquante. Les notes en marge et la pastille
+   devant chaque ligne reprennent les mêmes couleurs. **Ouvrir dans Word** ouvre le fichier produit.
 
 L'interface suit le thème clair ou sombre de Windows.
 
@@ -257,6 +425,13 @@ règles RMN. Paramètres éditables :
   gèrent les lignes ; une ligne dont l'entrée est vide est ignorée, et une
   valeur « devient » vide reprend l'entrée. L'entrée est insensible à la casse
   et aux espaces multiples (`Td` et `td` sont équivalents).
+- **Solvants RMN** : table « écrit » → « devient » (balisage `*italique*`,
+  indices automatiques), même fonctionnement que les multiplicités ; voir
+  « Solvants configurables ».
+- **Contrôler la température** (coché par défaut) : décoché, le 3ᵉ élément de
+  la parenthèse est laissé tel quel (pas de marqueur si absente, pas de
+  normalisation ni de signalement d'unité) ; une parenthèse de moins de 2 ou de
+  plus de 3 éléments reste signalée.
 - **Marqueur de température manquante** : texte inséré lorsqu'une température
   est absente ou illisible (défaut `[??? K]`). Tant qu'il garde sa forme par
   défaut, il suit l'unité choisie (`[??? °C]`).
@@ -265,6 +440,8 @@ règles RMN. Paramètres éditables :
   italique** : activent ou désactivent ces styles.
 - **Écart HRMS toléré (ppm)** : au-delà, l'écart entre masse trouvée et masse
   calculée est signalé (défaut 5 ppm).
+- **Écart HRMS absolu toléré (Da)** : critère indépendant du précédent, appliqué
+  en plus (défaut 0.003 Da, usage du guide LCMCE).
 - **Évaluation** : pourcentage minimal de sections conformes pour chaque note
   (défaut : Parfait 100, Très bon 90, Bon 75, Correct 50 ; en dessous :
   Mauvais). Les seuils doivent être décroissants entre 0 et 100, sinon les
@@ -379,8 +556,11 @@ core/
                     parenthèse, delta, signaux, sortie stylisée)
     nmr_1h.py       Règle 1H NMR (noyau + formatage d'un signal)
     nmr_13c.py      Règle 13C NMR (noyau + formatage d'un signal)
-    nmr_hetero.py   Règles 19F NMR et 31P NMR
+    nmr_hetero.py   Règles 19F NMR, 31P NMR, 11B NMR et 29Si NMR
     hrms.py         Règle HRMS (format + vérification des masses)
+    ir.py           Règle IR (méthode, bandes entières triées, cm⁻¹)
+    rf.py           Règle Rf (f en indice Word, phase stationnaire, éluant)
+    melting_point.py  Règle m.p. / b.p. (plage, °C, solvant, pression, dec., lit.)
     mass.py         Masses monoisotopiques, formule brute, m/z d'un ion
 ui/
   controller.py     Logique applicative (sans interface, testable)
@@ -400,7 +580,13 @@ métier.
 - `1H NMR` — `core/rules/nmr_1h.py` (sortie stylisée, voir ci-dessus) ;
 - `13C NMR` — `core/rules/nmr_13c.py` (sortie stylisée, implémentée) ;
 - `19F NMR`, `31P NMR` — `core/rules/nmr_hetero.py` (sortie stylisée) ;
-- `HRMS` — `core/rules/hrms.py` (sortie stylisée, masses vérifiées).
+- `HRMS` — `core/rules/hrms.py` (sortie stylisée, masses vérifiées) ;
+- `IR` — `core/rules/ir.py` (sortie stylisée, bandes entières triées) ;
+- `Rf` — `core/rules/rf.py` (sortie stylisée, f en indice Word) ;
+- `m.p. / b.p.` — `core/rules/melting_point.py` (structure imposée) ;
+- `11B NMR`, `29Si NMR` — `core/rules/nmr_hetero.py` ;
+- `Unités` — `core/rules/units.py` (espace insécable nombre-unité) ;
+- `Ordre des analyses` — `core/rules/analysis_order.py` (contrôle seulement).
 
 Le catalogue central des règles est la fonction `available_rules()` de
 `core/processor.py` : toute règle qui y figure est automatiquement proposée dans

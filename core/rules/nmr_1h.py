@@ -3,7 +3,7 @@
 Format cible (exposant Unicode, gras sur le label seul, delta
 italique)::
 
-    ¹H NMR (<fréquence> MHz, <solvant>, <température> K) δ <signaux>
+    ¹H NMR (<fréquence> MHz, <solvant>, <température> K) δ (ppm) = <signaux>
 
 Signal 1H : déplacement, puis entre parenthèses multiplicité, J, intégration,
 attribution. Toute la logique de section est dans ``nmr_section``.
@@ -26,6 +26,7 @@ class OneHNmrRule(NmrSectionRule):
         "absente."
     )
     nucleus = "1H"
+    shift_decimals = 2  # δ du 1H : 2 décimales (3 tolérées)
 
     def format_signal(self, signal: nmr_common.Signal) -> str:
         return nmr_common.format_signal_1h(signal)

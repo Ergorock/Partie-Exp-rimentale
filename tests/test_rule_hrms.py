@@ -174,7 +174,7 @@ def test_nmr_section_stops_before_hrms():
     )
     final = process_texts([text], build_registry()).paragraphs[0].new_text
     assert final == (
-        "¹³C NMR (100 MHz, CDCl₃, 298 K) δ 128.0, 77.0. "
+        "¹³C NMR (100 MHz, CDCl₃, 298 K) δ (ppm) = 128.0, 77.0. "
         "HRMS (ESI) m/z: [M + H]⁺ Calcd for C₁₀H₁₃O₂ 165.0910; Found 165.0912."
     )
 

@@ -221,7 +221,9 @@ def apply_text_edit(paragraph: Paragraph, old_text: str, new_text: str) -> bool:
 
 # Propriétés retirées du style de base des segments stylisés : la règle fixe
 # elle-même gras / italique, et les exposants / indices sont toujours écrits en
-# Unicode, jamais en superscript / subscript Word.
+# Unicode, jamais en superscript / subscript Word. Seule exception : un segment
+# ``subscript=True`` (D de ``[α]D``, f de ``Rf``, R de ``tR``) reçoit l'indice
+# Word, posé APRÈS ce nettoyage.
 _SEGMENT_STRIPPED_PROPS = ("w:b", "w:bCs", "w:i", "w:iCs", "w:vertAlign")
 
 
@@ -286,7 +288,10 @@ def _make_run(paragraph: Paragraph, text: str, rpr, style=None):
 def _segment_run(paragraph: Paragraph, segment: "StyledSegment", rpr):
     """Run d'un segment stylisé : gras / italique posés seulement si demandés."""
     style = (True if segment.bold else None, True if segment.italic else None)
-    return _make_run(paragraph, segment.text, rpr, style)
+    element = _make_run(paragraph, segment.text, rpr, style)
+    if segment.subscript:
+        Run(element, paragraph).font.subscript = True
+    return element
 
 
 def _replace_runs(paragraph: Paragraph, new_elements) -> None:

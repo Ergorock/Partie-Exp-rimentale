@@ -31,17 +31,17 @@ def _rule(name):
 
 def test_position_number_in_attribution_is_not_subscripted():
     result = RULE_1H.apply(HEAD + "7.26 (d, J = 8.0 Hz, 1H, H4)")
-    assert result.new_text.endswith("(d, J = 8.0 Hz, 1H, H4)")
+    assert result.new_text.endswith("(d, J = 8.0 Hz, 1\xa0H; H4)")
 
 
 def test_primed_position_and_carbon_numbering_are_kept():
     result = RULE_13C.apply("13C NMR (100 MHz, CDCl3, 298 K) δ 128.0 (C3), 120.1 (C4')")
-    assert result.new_text.endswith("δ 128.0 (C3), 120.1 (C4')")
+    assert result.new_text.endswith("δ (ppm) = 128.0 (C3), 120.1 (C4')")
 
 
 def test_formula_group_in_attribution_is_still_subscripted():
     result = RULE_1H.apply(HEAD + "3.80 (s, 3H, OCH3)")
-    assert result.new_text.endswith("(s, 3H, OCH₃)")
+    assert result.new_text.endswith("(s, 3\xa0H; OCH₃)")
 
 
 def test_attribution_formula_after_parenthesis():
@@ -76,7 +76,7 @@ def test_en_dash_minus_shift_is_parsed():
 
 def test_negative_shifts_are_sorted():
     result = RULE_1H.apply(HEAD + "−1.5 (s, 1H), 0.5 (s, 1H)")
-    assert result.new_text.endswith("δ 0.5 (s, 1H), −1.5 (s, 1H)")
+    assert result.new_text.endswith("δ (ppm) = 0.5 (s, 1\xa0H), −1.5 (s, 1\xa0H)")
 
 
 # --- Label écrit avec un tiret -------------------------------------------------
@@ -90,8 +90,8 @@ def test_hyphenated_sections_are_split():
     text = "1H-NMR (400 MHz, CDCl3, 298 K) δ 7.26 (s, 1H) 13C-NMR (100 MHz, CDCl3, 298 K) δ 77.0"
     final = _final(text)
     assert final == (
-        "¹H NMR (400 MHz, CDCl₃, 298 K) δ 7.26 (s, 1H) "
-        "¹³C NMR (100 MHz, CDCl₃, 298 K) δ 77.0"
+        "¹H NMR (400 MHz, CDCl₃, 298 K) δ (ppm) = 7.26 (s, 1\xa0H) "
+        "¹³C NMR (100 MHz, CDCl₃, 298 K) δ (ppm) = 77.0"
     )
 
 
@@ -99,20 +99,20 @@ def test_hyphenated_sections_are_split():
 
 def test_13c_decoupled_label_is_recognized():
     result = RULE_13C.apply("13C{1H} NMR (100 MHz, CDCl3, 298 K) δ 77.0, 128.0")
-    assert result.new_text == "¹³C{¹H} NMR (100 MHz, CDCl₃, 298 K) δ 128.0, 77.0"
+    assert result.new_text == "¹³C{¹H} NMR (100 MHz, CDCl₃, 298 K) δ (ppm) = 128.0, 77.0"
 
 
 def test_19f_rule_is_available_and_formats():
     rule = _rule("19F NMR")
     result = rule.apply("19F{1H} NMR (376 MHz, CDCl3, 298 K) δ -63.2 (s, 3F), -20.9 (s, 3F)")
-    assert result.new_text == "¹⁹F{¹H} NMR (376 MHz, CDCl₃, 298 K) δ -20.9 (s, 3F), -63.2 (s, 3F)"
+    assert result.new_text == "¹⁹F{¹H} NMR (376 MHz, CDCl₃, 298 K) δ (ppm) = -20.9 (s, 3\xa0F), -63.2 (s, 3\xa0F)"
 
 
 def test_31p_rule_is_available_and_formats():
     rule = _rule("31P NMR")
     result = rule.apply("31P{1H} NMR (162 MHz, CDCl3, 298 K) δ 25.1, 30.2 (d, J = 12.0 Hz)")
     assert result.new_text == (
-        "³¹P{¹H} NMR (162 MHz, CDCl₃, 298 K) δ 30.2 (d, J = 12.0 Hz), 25.1"
+        "³¹P{¹H} NMR (162 MHz, CDCl₃, 298 K) δ (ppm) = 30.2 (d, J = 12.0 Hz), 25.1"
     )
 
 
@@ -126,7 +126,7 @@ def test_demo_paragraph_19f_section_is_processed():
         "19F{1H} NMR (376.55 MHz, DMF-d7, 298 K): ẟ (ppm) = -20.9 (3F), -29.3 (6F)"
     )
     final = _final(text)
-    assert final.endswith("¹⁹F{¹H} NMR (376.55 MHz, DMF-d₇, 298 K) δ -20.9 (3F), -29.3 (6F)")
+    assert final.endswith("¹⁹F{¹H} NMR (376.55 MHz, DMF-d₇, 298 K) δ (ppm) = -20.9 (3\xa0F), -29.3 (6\xa0F)")
 
 
 # --- J en italique --------------------------------------------------------------
@@ -161,9 +161,9 @@ def test_common_composite_multiplicities_are_recognized():
     )
     result = RULE_1H.apply(HEAD + body)
     assert not _flagged(result)
-    assert result.new_text.endswith(body)
+    assert result.new_text.endswith("δ (ppm) = " + body.replace("H)", "\xa0H)"))
 
 
 def test_br_variants_are_normalized():
     result = RULE_1H.apply(HEAD + "5.0 (br. s, 1H), 4.0 (bd, 1H)")
-    assert result.new_text.endswith("δ 5.0 (br s, 1H), 4.0 (br d, 1H)")
+    assert result.new_text.endswith("δ (ppm) = 5.0 (br s, 1\xa0H), 4.0 (br d, 1\xa0H)")

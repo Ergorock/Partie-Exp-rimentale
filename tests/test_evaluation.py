@@ -13,7 +13,7 @@ from core.processor import build_registry
 from core.rules.base import ActionKind
 from core.rules.nmr_1h import OneHNmrRule
 
-CONFORM_1H = "¹H NMR (400 MHz, CDCl₃, 298 K) δ 7.26 (s, 1H)"
+CONFORM_1H = "¹H NMR (400 MHz, CDCl₃, 298 K) δ (ppm) = 7.26 (s, 1\xa0H)"
 RAW_1H = "1H NMR (400MHz, CDCl3, 298) δ 7.26 (s, 1H)"
 CONFORM_HRMS = "HRMS (ESI) m/z: [M + H]⁺ Calcd for C₁₀H₁₃O₂ 165.0910; Found 165.0912."
 WRONG_HRMS = "HRMS (ESI) m/z: [M + H]⁺ Calcd for C₁₀H₁₃O₂ 165.0950; Found 165.0952."
@@ -34,13 +34,13 @@ def test_already_styled_section_is_recognized_as_conform():
 
 
 def test_already_styled_decoupled_label_is_recognized():
-    text = "¹⁹F{¹H} NMR (376 MHz, CDCl₃, 298 K) δ −63.2 (s, 3F)"
+    text = "¹⁹F{¹H} NMR (376 MHz, CDCl₃, 298 K) δ (ppm) = −63.2 (s, 3\xa0F)"
     final = _evaluate([text]).items
     assert [(i.rule_name, i.status) for i in final] == [("19F NMR", "conforme")]
 
 
 def test_unchanged_section_keeps_its_flags():
-    text = "¹H NMR (400 MHz, CDCl₃, [??? K]) δ 7.26 (s, 1H)"
+    text = "¹H NMR (400 MHz, CDCl₃, [??? K]) δ (ppm) = 7.26 (s, 1\xa0H)"
     result = OneHNmrRule().apply(text)
     assert result.new_text == text
     kinds = [a.kind for a in result.actions]
@@ -165,3 +165,24 @@ def test_cli_evaluate_mode_writes_nothing(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "50 %" in out and "Correct" in out
     assert os.listdir(tmp_path) == ["in.docx"]
+
+
+# --- IR ------------------------------------------------------------------------------
+
+CONFORM_IR = "IR (ATR): ν\u0303(cm⁻¹) = 3420, 1715, 1600"
+
+
+def test_ir_conform_and_corrected_items():
+    report = _evaluate([CONFORM_IR, "IR (ATR) 1715, 3420 cm-1"])
+    assert [(i.rule_name, i.status) for i in report.items] == [
+        ("IR", "conforme"),
+        ("IR", "corrigé"),
+    ]
+
+
+def test_ir_decimal_band_is_to_check_and_gap_is_grouped_on_fixed_part():
+    report = _evaluate(["IR (ATR) 3420, 1715.5 cm-1", "IR (ATR) 3420, 1600.5 cm-1"])
+    assert [i.status for i in report.items] == ["à vérifier", "à vérifier"]
+    issues = report.issues()
+    assert len(issues) == 1
+    assert issues[0].count == 2

@@ -14,7 +14,7 @@ from core.processor import build_default_registry, process_document, standardize
 from core.rules.nmr_1h import OneHNmrRule
 
 RAW = "1H NMR (400 MHz, CDCl3, 298 K) δ 7.26 (s, 1H)"
-DONE = "¹H NMR (400 MHz, CDCl₃, 298 K) δ 7.26 (s, 1H)"
+DONE = "¹H NMR (400 MHz, CDCl₃, 298 K) δ (ppm) = 7.26 (s, 1\xa0H)"
 
 
 @pytest.fixture(autouse=True)
@@ -138,5 +138,5 @@ def test_multiplicity_keys_are_case_insensitive():
 
     cfg.set_config(config)
     result = OneHNmrRule().apply("1H NMR (400 MHz, CDCl3, 298 K) δ 7.26 (td, J = 7.5 Hz, 1H)")
-    assert result.new_text.endswith("δ 7.26 (td, J = 7.5 Hz, 1H)")
+    assert result.new_text.endswith("δ (ppm) = 7.26 (td, J = 7.5 Hz, 1\xa0H)")
     assert all(a.kind.value != "flagged" for a in result.actions)

@@ -40,17 +40,64 @@ function renderNmr(text) {
       "<b>$1</b>"
     );
     html = html.replace(/\bHRMS(?=(?: \([^)]*\))? m\/z)/g, "<b>HRMS</b>");
+    html = html.replace(/\bRf(?= = )/g, "<b>R<sub>f</sub></b>");
   }
   if (state.settings?.italic_delta !== false) {
     html = html.replace(/δ/g, "<i>δ</i>");
   }
   html = html.replace(/\bm\/z(?=:)/g, "<i>m/z</i>");
+  // Aperçu seulement : le d des solvants deutérés (DMSO-d₆, TFA-d) en italique.
+  html = html.replace(/(-)d(?=[₀-₉]*, )/g, "$1<i>d</i>");
   if (state.settings?.italic_j !== false) {
     html = html.replace(/(?<![A-Za-z])J(?=\s*=)/g, "<i>J</i>");
   }
   return html;
 }
 
+// --- Surlignage dans le texte ---------------------------------------------------
+// Les empans (début, fin, cas) sont calculés en Python (core/highlights.py) sur
+// le texte final ; ici on se contente de les poser sur le texte déjà mis en
+// forme (gras / italique), en découpant les noeuds texte pour que les balises
+// existantes restent correctement imbriquées.
+const HL_TITLES = {
+  corrected: "Corrigé automatiquement",
+  flagged: "À vérifier",
+  placeholder: "Marqueur inséré (donnée manquante)",
+};
+function highlightHtml(text, spans) {
+  const box = document.createElement("div");
+  box.innerHTML = renderNmr(text);
+  if (!spans || spans.length === 0) return box.innerHTML;
+  const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  let offset = 0;
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    nodes.push({ node: n, start: offset });
+    offset += n.nodeValue.length;
+  }
+  for (const { node, start } of nodes) {
+    const value = node.nodeValue;
+    const end = start + value.length;
+    const hits = spans.filter((s) => s.start < end && s.end > start);
+    if (hits.length === 0) continue;
+    const fragment = document.createDocumentFragment();
+    let pos = 0;
+    for (const s of hits) {
+      const a = Math.max(s.start, start) - start;
+      const b = Math.min(s.end, end) - start;
+      if (a > pos) fragment.append(value.slice(pos, a));
+      const mark = document.createElement("mark");
+      mark.className = `hl hl-${s.kind}`;
+      mark.title = HL_TITLES[s.kind] || "";
+      mark.textContent = value.slice(a, b);
+      fragment.append(mark);
+      pos = b;
+    }
+    if (pos < value.length) fragment.append(value.slice(pos));
+    node.replaceWith(fragment);
+  }
+  return box.innerHTML;
+}
 function splitPath(path) {
   const i = Math.max(path.lastIndexOf("\\"), path.lastIndexOf("/"));
   return i < 0 ? ["", path] : [path.slice(0, i), path.slice(i + 1)];
@@ -110,13 +157,21 @@ function renderRules(rules) {
     label.querySelector("input").addEventListener("change", updateRunButton);
     box.appendChild(label);
   }
+  updateRulesCount();
 }
 
 function enabledRules() {
   return [...document.querySelectorAll("[data-rule]")].filter((c) => c.checked).map((c) => c.dataset.rule);
 }
 
+// Résumé affiché dans l'en-tête repliable : « 6 sur 6 actives ».
+function updateRulesCount() {
+  const total = document.querySelectorAll("[data-rule]").length;
+  $("rules-count").textContent = total ? `${enabledRules().length} sur ${total} actives` : "";
+}
+
 function updateRunButton() {
+  updateRulesCount();
   $("run").disabled = !state.input || !state.output || enabledRules().length === 0;
   $("evaluate").disabled = !state.input || enabledRules().length === 0;
 }
@@ -194,9 +249,15 @@ function renderEntries() {
   for (const p of shown) list.appendChild(renderEntry(p));
 }
 
+// Classe de surlignage d'une entrée : la plus grave prime (à vérifier, marqueur, corrigé).
+function entryTone(actions, changed) {
+  if (actions.some((a) => a.kind === "flagged")) return "is-flagged";
+  if (actions.some((a) => a.kind === "placeholder")) return "is-placeholder";
+  return changed || actions.some((a) => a.kind === "corrected") ? "is-fixed" : "is-ok";
+}
 function renderEntry(p) {
   const li = document.createElement("li");
-  li.className = "entry";
+  li.className = `entry ${entryTone(p.actions, p.changed)}`;
   const notes = p.actions.filter((a) => a.kind === "flagged" || a.kind === "placeholder");
   const fixes = p.actions.filter((a) => a.kind === "corrected");
 
@@ -216,7 +277,7 @@ function renderEntry(p) {
   li.innerHTML = `
     <p class="entry-where">${escapeHtml(p.label)}</p>
     <div>
-      <p class="entry-text">${renderNmr(p.after)}</p>
+      <p class="entry-text">${highlightHtml(p.after, p.spans)}</p>
       ${fixes.length || p.changed ? `<details><summary>Voir l'original et les corrections</summary>${beforeHtml}${fixesHtml}</details>` : ""}
     </div>
     <div class="notes">${noteHtml}</div>`;
@@ -327,7 +388,7 @@ function renderEvaluation(ev) {
 
 function renderEvalItem(item) {
   const li = document.createElement("li");
-  li.className = "entry";
+  li.className = `entry ${entryTone(item.actions, item.status === "corrigé")}`;
   const notes = item.actions.filter((a) => a.kind !== "corrected");
   const fixes = item.actions.filter((a) => a.kind === "corrected");
   const notesHtml = notes
@@ -348,45 +409,58 @@ function renderEvalItem(item) {
 
 // --- Paramètres --------------------------------------------------------------------
 
-function addMultRow(written = "", becomes = "") {
+function addMultRow(written = "", becomes = "", bodyId = "mult-rows") {
   const tr = document.createElement("tr");
   tr.innerHTML = `
     <td><input type="text" aria-label="Écrit dans le document" spellcheck="false" value="${escapeHtml(written)}"></td>
     <td><input type="text" aria-label="Devient" spellcheck="false" value="${escapeHtml(becomes)}"></td>
     <td><button type="button" class="link" aria-label="Retirer ${escapeHtml(written)}">Retirer</button></td>`;
   tr.querySelector("button").addEventListener("click", () => tr.remove());
-  $("mult-rows").appendChild(tr);
+  $(bodyId).appendChild(tr);
   return tr;
+}
+
+// Lit un tableau « Écrit / Devient » en dictionnaire (valeur vide : la clé).
+function collectRows(bodyId) {
+  const table = {};
+  for (const tr of $(bodyId).querySelectorAll("tr")) {
+    const [written, becomes] = [...tr.querySelectorAll("input")].map((i) => i.value.trim());
+    if (written) table[written] = becomes || written;
+  }
+  return table;
 }
 
 function fillSettings(s) {
   $("mult-rows").innerHTML = "";
   for (const [written, becomes] of Object.entries(s.multiplicities)) addMultRow(written, becomes);
+  $("solvent-rows").innerHTML = "";
+  for (const [written, becomes] of Object.entries(s.solvents || {})) addMultRow(written, becomes, "solvent-rows");
   $("sort-order").value = s.sort_order;
   $("temperature-unit").value = s.temperature_unit;
   $("placeholder").value = s.temperature_placeholder;
   $("bold-label").checked = s.bold_label;
   $("italic-delta").checked = s.italic_delta;
   $("italic-j").checked = s.italic_j;
+  $("check-temperature").checked = s.check_temperature !== false;
   $("hrms-ppm").value = s.hrms_ppm_tolerance;
+  $("hrms-abs").value = s.hrms_abs_tolerance;
   for (const key of THRESHOLD_KEYS) $(`th-${key}`).value = s.evaluation_thresholds[key];
 }
 
 function collectSettings() {
-  const multiplicities = {};
-  for (const tr of $("mult-rows").querySelectorAll("tr")) {
-    const [written, becomes] = [...tr.querySelectorAll("input")].map((i) => i.value.trim());
-    if (written) multiplicities[written] = becomes || written;
-  }
   return {
-    multiplicities,
+    multiplicities: collectRows("mult-rows"),
+    solvents: collectRows("solvent-rows"),
     sort_order: $("sort-order").value,
     temperature_unit: $("temperature-unit").value,
     temperature_placeholder: $("placeholder").value,
     bold_label: $("bold-label").checked,
     italic_delta: $("italic-delta").checked,
     italic_j: $("italic-j").checked,
+    check_temperature: $("check-temperature").checked,
     hrms_ppm_tolerance: Number($("hrms-ppm").value),
+    hrms_abs_tolerance: Number($("hrms-abs").value),
+    hrms_abs_tolerance: Number($("hrms-abs").value),
     evaluation_thresholds: Object.fromEntries(THRESHOLD_KEYS.map((k) => [k, Number($(`th-${k}`).value)])),
   };
 }
@@ -425,6 +499,9 @@ function wire() {
     $("settings").showModal();
   });
   $("add-mult").addEventListener("click", () => addMultRow().querySelector("input").focus());
+  $("add-solvent").addEventListener(
+    "click", () => addMultRow("", "", "solvent-rows").querySelector("input").focus()
+  );
   $("temperature-unit").addEventListener("change", onUnitChange);
   $("reset-settings").addEventListener("click", () => fillSettings(state.defaults));
   $("cancel-settings").addEventListener("click", () => $("settings").close());

@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 
 class ActionKind(str, Enum):
@@ -24,6 +24,10 @@ class Action:
     kind: ActionKind
     message: str
     rule_name: str = ""
+    #: Extraits EXACTS du texte final du paragraphe à surligner dans l'interface
+    #: (valeur en cause, entrée concernée…). Affichage seulement ; un extrait
+    #: introuvable est ignoré.
+    highlights: Tuple[str, ...] = ()
 
 
 @dataclass
@@ -39,6 +43,10 @@ class StyledSegment:
     text: str
     bold: bool = False
     italic: bool = False
+    #: Indice Word (``w:vertAlign=subscript``). RÉSERVÉ aux lettres sans indice
+    #: Unicode : le D de ``[α]D``, le f de ``Rf`` et le R de ``tR``. Tout le
+    #: reste s'écrit en indices / exposants Unicode.
+    subscript: bool = False
 
 
 @dataclass

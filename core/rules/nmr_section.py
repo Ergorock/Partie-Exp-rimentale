@@ -5,7 +5,7 @@ après un préfixe / une autre section collée), la reformate et laisse le reste
 du paragraphe strictement intact. Format cible (exposant Unicode, gras sur le
 label seul, delta italique)::
 
-    ¹H NMR (<fréquence> MHz, <solvant>, <température> K) δ <signaux>
+    ¹H NMR (<fréquence> MHz, <solvant>, <température> K) δ (ppm) = <signaux>
 
 Garde-fous (on ne supprime ni n'invente jamais de texte) :
 
@@ -72,11 +72,33 @@ def _signal_segments(text: str, italic_j: bool) -> List[StyledSegment]:
     return segments
 
 
+def _paren_segments(paren: nmr_common.ParenResult) -> List[StyledSegment]:
+    """Segments de `` (fréquence, solvant, température)``.
+
+    Sans pièces de solvant, un seul segment normal. Sinon le texte est découpé
+    autour du solvant, dont les pièces portent l'italique. La concaténation
+    des segments est toujours `` (`` + ``paren.text`` + ``)``.
+    """
+    full = f" ({paren.text})"
+    if not paren.solvent_pieces or not any(italic for _, italic in paren.solvent_pieces):
+        return [StyledSegment(full)]
+    solvent = "".join(text for text, _ in paren.solvent_pieces)
+    position = paren.text.find(solvent)
+    if position < 0:  # ne devrait pas arriver : repli sans italique
+        return [StyledSegment(full)]
+    segments = [StyledSegment(" (" + paren.text[:position])]
+    segments += [StyledSegment(text, italic=italic) for text, italic in paren.solvent_pieces]
+    segments.append(StyledSegment(paren.text[position + len(solvent):] + ")"))
+    return [s for s in segments if s.text]
+
+
 class NmrSectionRule(Rule):
     """Règle générique de section RMN (sortie stylisée)."""
 
     #: Motif regex du noyau en entrée (ex. ``"1H"``, ``"13C"``).
     nucleus: str = ""
+    #: Nombre de décimales attendu pour δ (une de plus est tolérée).
+    shift_decimals: int = 1
 
     def __init__(self) -> None:
         # Label ASCII du noyau, non précédé d'un chiffre / d'une lettre / d'une
@@ -133,10 +155,12 @@ class NmrSectionRule(Rule):
     # ------------------------------------------------------------------ #
     # Application
     # ------------------------------------------------------------------ #
-    def _flag_only(self, paragraph_text: str, message: str) -> RuleResult:
+    def _flag_only(
+        self, paragraph_text: str, message: str, highlights: tuple = ()
+    ) -> RuleResult:
         return RuleResult(
             new_text=paragraph_text,
-            actions=[Action(ActionKind.FLAGGED, message, self.name)],
+            actions=[Action(ActionKind.FLAGGED, message, self.name, highlights)],
         )
 
     def apply(self, paragraph_text: str) -> RuleResult:
@@ -171,6 +195,7 @@ class NmrSectionRule(Rule):
                 paragraph_text,
                 f"Texte non reconnu entre '{self.name}' et la parenthèse "
                 f"('{between.strip()}') : vérification manuelle requise.",
+                (between.strip(),) if between.strip() else (),
             )
 
         inside = match.group("inside")
@@ -191,16 +216,19 @@ class NmrSectionRule(Rule):
         # 2) Parenthèse à trois éléments.
         paren = nmr_common.normalize_parenthesis(inside, config)
         for kind, message in paren.actions:
-            actions.append(Action(_KIND_MAP[kind], message, self.name))
+            if message.startswith(nmr_common.UNKNOWN_SOLVENT_MESSAGE) and paren.unknown_solvent:
+                highlights = (paren.unknown_solvent,)
+            else:
+                highlights = (paren.text,) if kind == "flagged" else ()
+            actions.append(Action(_KIND_MAP[kind], message, self.name, highlights))
 
         # 3) Label stylisé (exposant Unicode, mot d'entrée conservé), seul en
-        #    gras ; la parenthèse qui le suit reste en style normal.
+        #    gras ; la parenthèse qui le suit reste en style normal, sauf les
+        #    pièces en italique du solvant (table des solvants).
         label = nmr_common.superscript_label(match.group("label"))
         paren_text = f" ({paren.text})"
-        segments = [
-            StyledSegment(label, bold=config.bold_label),
-            StyledSegment(paren_text),
-        ]
+        segments = [StyledSegment(label, bold=config.bold_label)]
+        segments += _paren_segments(paren)
         segment_plain = label + paren_text
 
         # 4) Signaux après le delta.
@@ -217,6 +245,7 @@ class NmrSectionRule(Rule):
                     "d'un texte non reconnu) : suite laissée telle quelle, "
                     "vérification manuelle requise.",
                     self.name,
+                    (original_rest.strip(),) if original_rest.strip() else (),
                 )
             )
             if original_rest:
@@ -227,8 +256,9 @@ class NmrSectionRule(Rule):
             segments += [
                 StyledSegment(" "),
                 StyledSegment(nmr_common.DELTA, italic=config.italic_delta),
+                StyledSegment(" (ppm) ="),
             ]
-            segment_plain += f" {nmr_common.DELTA}"
+            segment_plain += f" {nmr_common.DELTA} (ppm) ="
             if signals_text:
                 segments += _signal_segments(f" {signals_text}", config.italic_j)
                 segment_plain += f" {signals_text}"
@@ -272,8 +302,14 @@ class NmrSectionRule(Rule):
                     "Un ou plusieurs signaux n'ont pas pu être analysés : "
                     "liste des signaux laissée telle quelle, vérification manuelle.",
                     self.name,
+                    (body,),
                 )
             )
             return body + terminal
+        for message, culprits in nmr_common.decimal_issues(signals, self.shift_decimals):
+            actions.append(Action(
+                ActionKind.FLAGGED, message, self.name,
+                tuple(self.format_signal(s) for s in culprits),
+            ))
         ordered = nmr_common.sort_signals(signals, all_parsable, config)
         return ", ".join(self.format_signal(s) for s in ordered) + terminal

@@ -11,6 +11,7 @@ import os
 from dataclasses import dataclass
 from typing import List
 
+from core.highlights import compute_spans
 from core.evaluation import CONFORM, CORRECTED, TO_REVIEW, EvaluationReport, evaluate_file
 from core.processor import ProcessingReport, available_rules, same_file, standardize_file
 from core.rules.base import ActionKind
@@ -48,6 +49,8 @@ def report_to_dict(report: ProcessingReport) -> dict:
                 "before": pr.original_text,
                 "after": pr.new_text,
                 "changed": pr.changed,
+                # Surlignage dans le texte final (calculé dans core, affiché par l'UI).
+                "spans": compute_spans(pr.original_text, pr.new_text, pr.actions, pr.changed),
                 "needs_review": bool(kinds & {ActionKind.FLAGGED, ActionKind.PLACEHOLDER}),
                 "actions": [
                     {

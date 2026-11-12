@@ -14,8 +14,8 @@ organique contenue dans un fichier Word (`.docx`).
 
 - Entrée : un `.docx` mal formaté.
 - Sortie : un `.docx` corrigé + un **rapport des corrections**.
-- Quatre règles RMN (`1H NMR`, `13C NMR`, `19F NMR`, `31P NMR`) et une règle
-  `HRMS` sont implémentées, avec une sortie
+- Six règles RMN (`1H NMR`, `13C NMR`, `19F NMR`, `31P NMR`, `11B NMR`, `29Si NMR`) et les règles
+  `HRMS`, `IR`, `Rf`, `m.p. / b.p.`, `Unités` et `Ordre des analyses` sont implémentées, avec une sortie
   **stylisée** (gras, italique, exposants et indices en caractères Unicode).
 
 L'architecture est modulaire : chaque type de paragraphe à standardiser (RMN,
@@ -45,9 +45,15 @@ core/                   Cœur de traitement, SANS aucune dépendance d'interface
     nmr_section.py      Base NmrSectionRule (localisation, parenthèse, δ, signaux)
     nmr_1h.py           Règle 1H NMR (noyau + formatage d'un signal)
     nmr_13c.py          Règle 13C NMR (noyau + formatage d'un signal)
-    nmr_hetero.py       Règles 19F NMR et 31P NMR (même base)
+    nmr_hetero.py       Règles 19F, 31P, 11B et 29Si NMR (même base)
+    units.py            Règle Unités (espace insécable nombre-unité, procédure)
+    analysis_order.py   Règle Ordre des analyses (contrôle intra-paragraphe, sans édition)
     hrms.py             Règle HRMS (format ACS + vérification des masses)
+    ir.py               Règle IR (méthode, bandes entières triées, cm⁻¹)
+    rf.py               Règle Rf (f en indice Word, phase stationnaire, éluant)
+    melting_point.py    Règle m.p. / b.p. (plage, °C, solvant, pression, dec., lit.)
     mass.py             Masses monoisotopiques, formule brute, m/z d'un ion
+  highlights.py         Surlignage : empans (début, fin, cas) du texte final, pour l'UI
 ui/                     Interface, SEULE couche qui importe pywebview
   controller.py         Logique applicative testable (sans interface)
   web_api.py            API exposée au JavaScript (window.pywebview.api)
@@ -137,6 +143,22 @@ Une règle hérite de `core.rules.base.Rule` et implémente :
   `PLACEHOLDER` sont CONSERVÉS (pas remplacés par `UNCHANGED`) : une section
   conforme en apparence mais incomplète reste « à vérifier ».
 
+### Surlignage dans l'interface (`core/highlights.py`, `tests/test_highlights.py`)
+
+- `Action.highlights` : extraits EXACTS du texte final à surligner pour un
+  signalement `FLAGGED` (la valeur en cause, l'entrée concernée…). Affichage
+  seulement, jamais de logique : un extrait introuvable est ignoré. Une nouvelle
+  règle SHOULD renseigner `highlights` sur ses `FLAGGED` ; sans extrait, le
+  signalement reste visible en marge mais n'est pas surligné dans le texte.
+- `compute_spans(before, after, actions, changed)` (pur, dans `core`) renvoie
+  des empans `{start, end, kind}` sur le texte FINAL : `flagged` (extraits des
+  règles) > `placeholder` (marqueur `[??? K]` / valeur de `temperature_placeholder`) >
+  `corrected` (différence mot à mot avec l'original, espaces insécables
+  comprises). `ui/controller.py` les expose (`spans`), `ui/web/app.js` les pose
+  sur le texte déjà mis en forme (DOM, noeuds texte découpés) : aucune logique
+  métier en JavaScript. Pas de surlignage en mode évaluation (le texte affiché
+  est l'original).
+
 ### Mode évaluation (`core/evaluation.py`, `tests/test_evaluation.py`)
 
 - N'écrit jamais le document : règles appliquées en chaîne sur le texte seul.
@@ -186,8 +208,26 @@ tests.
   incomplète → `FLAGGED` sans correction. Température écrite dans une unité
   différente de l'unité configurée → laissée telle quelle + `FLAGGED` (jamais
   réétiquetée ni convertie).
-- **δ en italique** ; variantes d'entrée (`δ`, `ẟ`, `(ppm) =`) normalisées.
+- **δ en italique, suivi de `(ppm) =`** (décision du 2026-11-12, guide LCMCE) :
+  sortie `δ (ppm) = 7.26 (s, 1 H)` ; variantes d'entrée (`δ`, `ẟ`, avec ou sans
+  `(ppm) =`) normalisées vers cette forme (`(ppm) =` en style normal).
   **J en italique** (`italic_j`, configurable) : seule la mise en forme change.
+- **Plage de déplacements** (décision du 2026-11-12) : `7.41 – 7.50`, tiret
+  demi-cadratin ENTOURÉ d'espaces insécables (`nmr_common.RANGE_SEP`) ; même
+  forme pour les plages IR. **Intégration** `5 H` (espace insécable,
+  `nmr_common.format_integration`). En 1H, l'attribution suit les données du
+  signal après un point-virgule : `(m, 5 H; OCH₂)` (le `;` est aussi accepté en
+  entrée) ; en 13C l'attribution reste seule entre parenthèses.
+- **Décimales contrôlées, jamais modifiées** (décision du 2026-11-12) : δ 2
+  décimales en 1H (3 tolérées), 1 décimale pour 13C / 19F / 31P (2 tolérées), J
+  1 décimale ; autrement `FLAGGED` « Nombre de décimales … inattendu : valeurs »
+  (`nmr_common.check_decimals`, attribut `NmrSectionRule.shift_decimals`).
+  Contrôle limité aux listes entièrement parsables. Une nouvelle section RMN
+  fixe `shift_decimals` (défaut 1).
+- **Température obligatoire** (3 éléments) : décision du 2026-11-12, inchangée.
+  Désactivable par `check_temperature` (défaut `True`) : à `False`, le 3e élément
+  est laissé tel quel (ni marqueur, ni unité, ni signalement d'unité) ; seule la
+  structure de la parenthèse (< 2 ou > 3 éléments) reste signalée.
 - **Signe moins** : `-`, `−` (U+2212) et `–` (U+2013) acceptés devant un
   déplacement ; le signe est conservé tel qu'écrit.
 - **Label seul en gras** (`¹H NMR`, `HRMS`), jamais la parenthèse qui suit
@@ -216,7 +256,7 @@ tests.
   (aucun δ ajouté). Couvert par `tests/test_sections_and_formatting.py`.
 - **Fin de section** : une section RMN s'arrête au label RMN suivant OU au
   label d'une autre analyse (`nmr_common._OTHER_ANALYSIS_RE`, aujourd'hui
-  `HRMS`). Toute nouvelle règle d'analyse doit y ajouter son label.
+  `HRMS` et `IR`). Toute nouvelle règle d'analyse doit y ajouter son label.
 
 ### HRMS (`core/rules/hrms.py`, `tests/test_rule_hrms.py`)
 
@@ -227,11 +267,120 @@ tests.
   masse calculée est recalculée (`mass.py`) : formule de l'ion OU formule
   neutre + ion, avec ou sans masse de l'électron ; incohérente → `FLAGGED`
   avec la valeur attendue. Écart trouvé / calculé > `hrms_ppm_tolerance`
-  (5 ppm) → `FLAGGED`. Ion ou méthode absents → `FLAGGED`.
+  (5 ppm) → `FLAGGED`. Écart absolu > `hrms_abs_tolerance` (0.003 Da, en plus des
+  ppm) → `FLAGGED`. Masse calculée < 500 : 4 décimales attendues pour les masses
+  calculée et trouvée, sinon `FLAGGED` (valeurs conservées). Ion ou méthode
+  absents → `FLAGGED`.
 - Structure non reconnue (virgule décimale, ordre inhabituel) → `FLAGGED`
   sans modification. Mention en prose (sans `calcd` / `found`) ignorée.
 - Une entrée déjà conforme mais incohérente reste signalée (les vérifications
   ne dépendent pas d'un changement de texte).
+
+### IR (`core/rules/ir.py`, `tests/test_rule_ir.py`)
+
+- Format cible (décision du 2026-11-12) : `IR (ATR): ν̃(cm⁻¹) = 3420, 1715,
+  1600` (`ν̃` = ν + U+0303). Label `IR` seul en gras (`bold_label`), pas
+  d'italique ni d'indice Word. Méthode recopiée telle qu'écrite (indices
+  Unicode : `CHCl₃`), unité `cm⁻¹` Unicode dans la parenthèse du symbole.
+- Bandes : entiers de 3 à 4 chiffres, ou plage d'entiers (`3300 – 2400`, tiret
+  demi-cadratin entouré d'espaces insécables, triée sur sa borne haute),
+  recopiés tels quels, tri DÉCROISSANT FIXE
+  (pas de paramètre), attribution / intensité entre parenthèses conservée.
+- Variantes acceptées : `νmax`, `ν`, `ν̃`, `vmax`, `v` ou aucun symbole ; unité
+  `cm-1`, `cm−1`, `cm^-1`, `cm⁻¹` en fin de liste, en tête (`νmax/cm-1`, forme
+  RSC convertie), entre parenthèses ou dans la parenthèse de la méthode ;
+  `=` / `:` optionnel ; ponctuation finale conservée. Symbole ou unité absents :
+  ajoutés (forme, pas donnée).
+- Sûreté : méthode absente, bande décimale (`1715.5`), virgule décimale
+  (`\d,\d`, donc `3420,1715` sans espace aussi), texte hors parenthèse,
+  parenthèse imbriquée, liste vide → entrée INTACTE + `FLAGGED` (aucun arrondi,
+  aucun tri). Le segment IR court jusqu'au label d'analyse suivant ou la fin du
+  paragraphe : du texte libre après les bandes rend donc l'entrée non
+  reconnue.
+- Mention en prose (« Les spectres IR… » hors tête de paragraphe) ignorée.
+
+### Solvants RMN (`config.solvents`, `nmr_common.lookup_solvent`, `tests/test_solvents.py`)
+
+- Le 2e élément de la parenthèse des sections RMN est cherché dans la table
+  `RmnConfig.solvents` (écrit -> sortie balisée), élément entier, insensible à
+  la casse et aux espaces multiples. m.p./b.p., IR et Rf ne l'utilisent pas.
+- Balisage de la sortie : `*…*` = italique (`DMSO-*d*6`) ; indices Unicode
+  automatiques (`nmr_common.parse_solvent_markup`, appliqués sur le texte
+  complet puis redécoupés). Le balisage n'apparaît jamais dans `new_text`.
+  Un `*` non apparié est refusé par `config_from_dict` (la clé est recopiée).
+- Solvant trouvé : remplacé (`CORRECTED`, « Solvant remplacé » ou, si seuls les
+  indices changent, « Solvant en indices Unicode »). Absent : indices
+  automatiques, AUCUN remplacement, `FLAGGED` « Solvant absent de la table :
+  <valeur> ; … » (surlignage sur le solvant).
+- Idempotence : la forme déjà rendue (`DMSO-d₆`) est reconnue par `lookup_solvent`.
+- `ParenResult.solvent_pieces` alimente `nmr_section._paren_segments` : la
+  parenthèse n'est découpée en segments QUE si une pièce est en italique.
+- Limite (comme Rf) : texte déjà conforme -> document non réécrit, un *d* non
+  italique dans Word n'est pas corrigé.
+
+### 11B / 29Si, Unités, Ordre des analyses
+
+- **11B NMR, 29Si NMR** (`nmr_hetero.py`, `tests/test_analysis_order_and_nmr_b_si.py`) :
+  héritent de `NmrSectionRule` comme 31P (`format_signal_13c`), 1 décimale pour δ.
+  La largeur à mi-hauteur (Hz) du 11B n'est pas reconnue (signal non analysable
+  -> liste intacte + `FLAGGED`).
+- **Unités** (`units.py`, `tests/test_rule_units.py`) : espace insécable entre
+  nombre et unité (`220 mg`, `77 %`, `25 °C`), `mol%` / `wt%` / `vol%` collés,
+  `ºC` / `˚C` -> `°C`. Seule la forme change. Unités d'une lettre (`g h L M`)
+  seulement avec espace déjà écrite. Édition par diff (`apply_text_edit`, pas
+  de segments). **Tout texte à partir du premier label d'analyse est exclu**
+  (sinon la règle et les règles d'analyse se contrediraient : `400 MHz`
+  reste avec une espace ordinaire). Rendement avec décimale -> `FLAGGED`.
+- **Ordre des analyses** (`analysis_order.py`) : séquence Rf ; m.p./b.p. ; 1H ;
+  13C ; autres RMN ; IR ; UV/Vis ; MS ; HRMS ; analyse élémentaire. Aucune
+  modification. `applies` n'est vrai QUE si l'ordre est incorrect (une règle
+  de contrôle toujours « conforme » gonflerait le score d'évaluation). Intra-
+  paragraphe seulement : l'ordre entre paragraphes n'est pas contrôlé.
+  Dérogation assumée à « applies vrai aussi sur la sortie » : cette règle ne
+  produit pas de sortie.
+
+### m.p. / b.p. (`core/rules/melting_point.py`, `tests/test_rule_melting_point.py`)
+
+- Structure IMPOSÉE (décisions du 2026-11-12) : `m.p. 185 – 186 °C (Et₂O/hexane;
+  dec.; lit. [12] 185 – 187 °C)` ; b.p. : `b.p. 80 °C (15 mmHg)`. Label en
+  minuscules avec points, en gras (`bold_label`), même règle pour les deux.
+- Température entière ou plage (tiret demi-cadratin entouré d'espaces
+  insécables, espace insécable avant `°C`). `°C` SEUL : `ºC`, `˚C`, `C` ou unité
+  absente -> `°C` (unité absente = correction signalée). Kelvins : jamais
+  convertis, entrée intacte + `FLAGGED`.
+- Parenthèse optionnelle, éléments dans cet ordre séparés par `; ` : solvant
+  (recopié, indices Unicode), pression, `dec.`, `lit. [réf] valeur`. Entrées
+  reconnues : `(dec.)`, `décomp.`, `dec.` seul, `/ 15 mmHg`, `Et2O/hexane: [réf]
+  185-187 °C`, éléments dans un autre ordre.
+- **0 décimale** (valeurs principale et littérature) : sinon `FLAGGED`, valeur
+  conservée. Plage inversée -> `FLAGGED`, jamais corrigée. Valeur de la
+  littérature non exigée (produits connus non détectables).
+- Sûreté : virgule décimale, deux solvants, élément en double, littérature
+  illisible -> entrée intacte + `FLAGGED`. Toutes les entrées d'un paragraphe
+  sont traitées (le texte entre elles est conservé). Labels français (`Pf`,
+  `Tf`) non reconnus. `m.p.` / `b.p.` terminent une section RMN collée devant
+  (`_OTHER_ANALYSIS_RE`, avec une valeur qui suit).
+
+### Rf (`core/rules/rf.py`, `tests/test_rule_rf.py`)
+
+- Format cible (décision du 2026-11-12, guide LCMCE) : `Rf = 0.38 (SiO₂;
+  heptane/CH₂Cl₂ 1:1)` AVEC phase stationnaire. Label `Rf` en gras
+  (`bold_label`), **f en indice Word** (`StyledSegment.subscript`, exception 7.8),
+  R sans italique ; reste de l'entrée sans style.
+- La valeur n'est JAMAIS modifiée. Contrôles (`FLAGGED`) : 2 décimales,
+  intervalle [0 ; 1], phase stationnaire (SiO₂, silica, Al₂O₃, alumina, C18,
+  RP…) absente, proportions de l'éluant absentes (`4:1`, `9/1`, `20 %`,
+  `v/v`), parenthèse absente.
+- Variantes : `Rf:`, `Rf 0.35`, `R.f.`, `R_f`, parenthèse avant la valeur
+  (déplacée après), `,` après la phase stationnaire en tête (devient `;`).
+  Éluant recopié (indices Unicode ; `C18`, `F254` jamais en indice).
+- Sûreté : virgule décimale, plage (`0.3-0.4`), deux parenthèses, texte inconnu
+  → entrée INTACTE + `FLAGGED`. Seule la première entrée `Rf` d'un paragraphe
+  est traitée. Mention en prose ignorée. `Rf` termine une section RMN collée
+  devant (`_OTHER_ANALYSIS_RE`).
+- Limite : si le texte est déjà conforme, le document n'est pas réécrit : un
+  `f` non mis en indice dans Word n'est donc pas corrigé (la règle ne voit que
+  le texte).
 
 ---
 
@@ -250,6 +399,10 @@ tests.
   s'il est absent ou corrompu. `config_from_dict` est tolérante champ par champ.
 - État de processus via `get_config` / `set_config` / `reset_config`. Les règles
   lisent la config au moment de `apply`.
+
+- `solvents` : table des solvants RMN (voir section 4), même validation que
+  `multiplicities` ; table vide ou invalide -> défauts. Un fichier de
+  préférences sans ce champ reçoit les défauts.
 
 Pour ajouter un paramètre : l'ajouter à la dataclass avec un défaut qui préserve
 le comportement actuel, l'intégrer à `config_to_dict` / `config_from_dict`
@@ -346,7 +499,8 @@ métier marqué « ⚠ À valider », demander à l'utilisateur au lieu de tranc
 
 1. **Écrire les tests d'abord** dans `tests/test_rule_<analyse>.py` (squelette
    en 7.6). Les lancer : ils doivent échouer.
-2. **Créer `core/rules/<analyse>.py`** : `from __future__ import annotations`,
+2. **Créer `core/rules/<analyse>.py`** (renseigner `Action.highlights` sur les
+   `FLAGGED`, voir « Surlignage dans l'interface ») : `from __future__ import annotations`,
    docstring de module en français qui donne le format cible et la liste des
    vérifications (squelette en 7.5).
 3. **Respecter le contrat `RuleResult`** (section 3) :
@@ -507,6 +661,19 @@ dans le test : `conftest.py` remet les défauts après chaque test.
   `r"\-" + "−–"` plutôt que d'écrire `"\-"` (avertissement
   Python). Dans une classe `[...]`, le tiret littéral se met en premier ou
   s'échappe.
+- **Plage de déplacements** (décision du 2026-11-12) : `7.41 – 7.50`, tiret
+  demi-cadratin ENTOURÉ d'espaces insécables (`nmr_common.RANGE_SEP`) ; même
+  forme pour les plages IR. **Intégration** `5 H` (espace insécable,
+  `nmr_common.format_integration`). En 1H, l'attribution suit les données du
+  signal après un point-virgule : `(m, 5 H; OCH₂)` (le `;` est aussi accepté en
+  entrée) ; en 13C l'attribution reste seule entre parenthèses.
+- **Décimales contrôlées, jamais modifiées** (décision du 2026-11-12) : δ 2
+  décimales en 1H (3 tolérées), 1 décimale pour 13C / 19F / 31P (2 tolérées), J
+  1 décimale ; autrement `FLAGGED` « Nombre de décimales … inattendu : valeurs »
+  (`nmr_common.check_decimals`, attribut `NmrSectionRule.shift_decimals`).
+  Contrôle limité aux listes entièrement parsables. Une nouvelle section RMN
+  fixe `shift_decimals` (défaut 1).
+- **Température obligatoire** (3 éléments) : décision du 2026-11-12, inchangée.
 - **Signe moins** : un nombre négatif peut arriver avec `-`, `−` (U+2212) ou
   `–` (U+2013, inséré par Word). Convertir pour le calcul, recopier tel quel
   en sortie (voir `nmr_common._to_float`).
@@ -531,7 +698,12 @@ dans le test : `conftest.py` remet les défauts après chaque test.
 - **Ordre des règles** : `available_rules()` fixe l'ordre d'application.
   Chaque règle n'édite que sa portion ; ne jamais dépendre de l'ordre.
 
-### 7.8 Indice Word pour `[α]D`, `Rf`, `tR` (à construire avec la 1ʳᵉ de ces règles)
+### 7.8 Indice Word pour `[α]D`, `Rf`, `tR` (CONSTRUIT avec la règle Rf)
+
+> Infrastructure en place (`StyledSegment.subscript`, `docx_io._segment_run`,
+> tests dans `test_docx_io.py` et `test_rule_rf.py`) : les règles `[α]D` et
+> `tR` n'ont plus qu'à poser `subscript=True` sur leur lettre. Le texte
+> d'origine de cette section est conservé ci-dessous.
 
 Unicode n'a pas d'indice pour D, f, R. Décision de l'utilisateur
 (2026-11-08) : ces trois lettres, et elles seules, passent en indice Word.
@@ -569,7 +741,10 @@ puis UV-vis.
   N, S… conservé tel qu'écrit.
 
 **IR** (`core/rules/ir.py`, label `IR`)
-- Cible : `IR (ATR) ν̃ 3420, 1715, 1600 cm⁻¹` (`ν̃` = ν + U+0303).
+- **IMPLÉMENTÉE** (voir section 4). Cible retenue : `IR (ATR): ν̃(cm⁻¹) = 3420,
+  1715, 1600` ; tri décroissant fixe ; forme RSC convertie. Notes d'origine
+  ci-dessous conservées pour mémoire.
+- Cible initiale (remplacée) : `IR (ATR) ν̃ 3420, 1715, 1600 cm⁻¹` (`ν̃` = ν + U+0303).
 - Variantes : `IR (neat|film|KBr|ATR|CHCl3)`, `νmax`, `ν (cm-1)`, `vmax`
   (v latin), `cm-1`, `cm−1`, `cm^-1`, unité en tête (`νmax/cm⁻¹ 3420, …`,
   forme RSC), intensités `(s)`, `(br)`, `(w)` et attributions `(C=O)`.
@@ -581,6 +756,9 @@ puis UV-vis.
   solvant / milieu en indices (`CHCl₃`).
 
 **Point de fusion** (`core/rules/melting_point.py`, label `mp`)
+- **IMPLÉMENTÉE** (voir section 4, sous-section m.p. / b.p.) avec la structure
+  du guide LCMCE (`m.p.`, plage avec espaces, 0 décimale). Les notes
+  ci-dessous, d'origine, sont conservées pour mémoire.
 - Cible : `mp 128–130 °C` ; avec solvant : `mp 128–130 °C (EtOH)` ;
   littérature : `mp 128–130 °C (lit. 129–130 °C)`.
 - Variantes : `m.p.`, `Mp`, `M.p.`, `128-130°C`, `128 - 130 ºC` (º ordinal),
@@ -602,11 +780,9 @@ puis UV-vis.
 - Vérification : température absente → `FLAGGED` (jamais inventée).
 
 **Rf** (`core/rules/rf.py`, label `Rf`)
-- Cible : `Rf = 0.35 (pentane/EtOAc 4:1)` : f en indice Word (7.8).
-- ⚠ À vérifier dans le guide ACS : R en italique ?
-- Variantes : `Rf:`, `Rf 0.35`, `R.f.`, éluant `(4:1 pentane/EtOAc)`,
-  `(pentane:EtOAc = 4:1)`, `v/v`.
-- Vérification : valeur hors [0, 1] → `FLAGGED`.
+- **IMPLÉMENTÉE** (voir section 4, sous-section Rf). Cible retenue : `Rf = 0.38
+  (SiO₂; heptane/CH₂Cl₂ 1:1)`, avec phase stationnaire.
+- R en italique : non (le guide LCMCE ne le demande pas).
 
 **HPLC / GC chirale** (`core/rules/chiral_hplc.py`, labels `HPLC`, `GC`, `SFC`)
 - Cible : `HPLC (Chiralpak AD-H, hexane/i-PrOH 90:10, 1.0 mL/min, 254 nm):
@@ -626,8 +802,7 @@ puis UV-vis.
 **Compléments RMN encore ouverts** (dans les règles existantes)
 - Option `decoupled_13c` : écrire `¹³C{¹H} NMR` (notation JOC) quand
   l'entrée dit `13C NMR` ; défaut `False` (comportement actuel).
-- Cohérence multiplicité / nombre de J (`dd` avec un seul J, `s` avec un J) :
-  `FLAGGED`, jamais corrigé.
+- Cohérence multiplicité / nombre de J : ÉCARTÉE (décision du 2026-11-12).
 - ⚠ À valider : remplacer `septic` (coquille) par `sept` en sortie.
 
 ---

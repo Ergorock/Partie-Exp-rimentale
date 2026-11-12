@@ -139,5 +139,5 @@ def test_separator_space_preserved_before_next_section():
         "13C NMR (100 MHz, CDCl3, 298 K) δ 149.4 (2C)"
     )
     result = RULE.apply(text)
-    assert "2H) 13C NMR" in result.new_text
-    assert "2H)13C" not in result.new_text
+    assert "2\xa0H) 13C NMR" in result.new_text
+    assert "2\xa0H)13C" not in result.new_text

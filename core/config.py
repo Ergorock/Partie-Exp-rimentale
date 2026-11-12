@@ -56,6 +56,42 @@ def _default_multiplicities() -> Dict[str, str]:
     return table
 
 
+def _default_solvents() -> Dict[str, str]:
+    """Solvants RMN reconnus par défaut : écrit dans le document -> sortie.
+
+    La sortie est un balisage léger : ``*…*`` met le texte en italique (le *d*
+    des solvants deutérés), les indices Unicode des chiffres sont ajoutés
+    automatiquement (``DMSO-*d*6`` -> ``DMSO-`` + *d* italique + ``₆``). Les
+    clés sont en minuscules, espaces réduits.
+    """
+    table = {
+        "cdcl3": "CDCl3",
+        "dmso-d6": "DMSO-*d*6",
+        "dmso d6": "DMSO-*d*6",
+        "d6-dmso": "DMSO-*d*6",
+        "(cd3)2so": "(CD3)2SO",
+        "cd3od": "CD3OD",
+        "meod": "CD3OD",
+        "c6d6": "C6D6",
+        "acetone-d6": "acetone-*d*6",
+        "d2o": "D2O",
+        "cd3cn": "CD3CN",
+        "cd2cl2": "CD2Cl2",
+        "thf-d8": "THF-*d*8",
+        "pyridine-d5": "pyridine-*d*5",
+        "toluene-d8": "toluene-*d*8",
+        "cd3cooh": "CD3COOH",
+        "cd3cod": "CD3COOD",
+        "tfa-d": "TFA-*d*",
+    }
+    return table
+
+
+def valid_solvent_markup(markup: str) -> bool:
+    """Vrai si le balisage ``*…*`` d'un solvant est apparié (nombre pair de ``*``)."""
+    return markup.count("*") % 2 == 0
+
+
 #: Notes du mode évaluation, de la meilleure à la moins bonne (hors « Mauvais »).
 EVALUATION_GRADES = ("parfait", "tres_bon", "bon", "correct")
 
@@ -92,13 +128,19 @@ class RmnConfig:
     """
 
     multiplicities: Dict[str, str] = field(default_factory=_default_multiplicities)
+    #: Table des solvants RMN : écrit (minuscules) -> sortie balisée ``*italique*``.
+    solvents: Dict[str, str] = field(default_factory=_default_solvents)
     temperature_placeholder: str = "[??? K]"
     sort_order: str = "desc"  # 'desc' | 'asc' | 'none'
     bold_label: bool = True
     italic_delta: bool = True
     temperature_unit: str = "K"  # 'K' | '°C'
+    #: Contrôle de la température (obligatoire, marqueur, unité) ; désactivé :
+    #: le 3e élément de la parenthèse est laissé tel quel.
+    check_temperature: bool = True
     italic_j: bool = True  # constante de couplage J en italique (usage ACS/RSC)
     hrms_ppm_tolerance: float = 5.0  # écart HRMS trouvé / calculé toléré (ppm)
+    hrms_abs_tolerance: float = 0.003  # écart HRMS absolu toléré (Da), en plus des ppm
     #: Seuils (pourcentage minimal de sections conformes) des notes du mode
     #: évaluation ; en dessous de ``correct`` : « Mauvais ».
     evaluation_thresholds: Dict[str, float] = field(
@@ -154,13 +196,16 @@ def config_to_dict(config: RmnConfig) -> dict:
     """Sérialise une ``RmnConfig`` en dictionnaire JSON-compatible."""
     return {
         "multiplicities": dict(config.multiplicities),
+        "solvents": dict(config.solvents),
         "temperature_placeholder": config.temperature_placeholder,
         "sort_order": config.sort_order,
         "bold_label": config.bold_label,
         "italic_delta": config.italic_delta,
         "temperature_unit": config.temperature_unit,
+        "check_temperature": config.check_temperature,
         "italic_j": config.italic_j,
         "hrms_ppm_tolerance": config.hrms_ppm_tolerance,
+        "hrms_abs_tolerance": config.hrms_abs_tolerance,
         "evaluation_thresholds": dict(config.evaluation_thresholds),
     }
 
@@ -196,6 +241,25 @@ def config_from_dict(data: dict) -> RmnConfig:
         if cleaned:
             multiplicities = cleaned
 
+    # solvents : paires str->str ; clé normalisée, valeur vide ou balisage '*'
+    # non apparié -> la clé elle-même ; table vide -> défauts.
+    solvents = defaults.solvents
+    raw_solvents = data.get("solvents")
+    if isinstance(raw_solvents, dict):
+        cleaned_solvents: Dict[str, str] = {}
+        for key, value in raw_solvents.items():
+            if not isinstance(key, str) or not isinstance(value, str):
+                continue
+            key = " ".join(key.split()).lower()
+            if not key:
+                continue
+            normalized = value.strip()
+            if not normalized or not valid_solvent_markup(normalized):
+                normalized = key
+            cleaned_solvents[key] = normalized
+        if cleaned_solvents:
+            solvents = cleaned_solvents
+
     # temperature_placeholder : str.
     temperature_placeholder = defaults.temperature_placeholder
     raw_placeholder = data.get("temperature_placeholder")
@@ -226,6 +290,12 @@ def config_from_dict(data: dict) -> RmnConfig:
     if isinstance(raw_unit, str) and raw_unit in _TEMPERATURE_UNITS:
         temperature_unit = raw_unit
 
+    # check_temperature : bool.
+    check_temperature = defaults.check_temperature
+    raw_check_temp = data.get("check_temperature")
+    if isinstance(raw_check_temp, bool):
+        check_temperature = raw_check_temp
+
     # italic_j : bool.
     italic_j = defaults.italic_j
     raw_italic_j = data.get("italic_j")
@@ -238,6 +308,11 @@ def config_from_dict(data: dict) -> RmnConfig:
     if isinstance(raw_ppm, (int, float)) and not isinstance(raw_ppm, bool) and raw_ppm > 0:
         hrms_ppm_tolerance = float(raw_ppm)
 
+    # hrms_abs_tolerance : nombre strictement positif (un booléen est refusé).
+    hrms_abs_tolerance = defaults.hrms_abs_tolerance
+    raw_abs = data.get("hrms_abs_tolerance")
+    if isinstance(raw_abs, (int, float)) and not isinstance(raw_abs, bool) and raw_abs > 0:
+        hrms_abs_tolerance = float(raw_abs)
     # evaluation_thresholds : 4 seuils valides, sinon tous les défauts.
     evaluation_thresholds = (
         _valid_thresholds(data.get("evaluation_thresholds"))
@@ -248,12 +323,15 @@ def config_from_dict(data: dict) -> RmnConfig:
         evaluation_thresholds=evaluation_thresholds,
         italic_j=italic_j,
         hrms_ppm_tolerance=hrms_ppm_tolerance,
+        hrms_abs_tolerance=hrms_abs_tolerance,
         multiplicities=multiplicities,
+        solvents=solvents,
         temperature_placeholder=temperature_placeholder,
         sort_order=sort_order,
         bold_label=bold_label,
         italic_delta=italic_delta,
         temperature_unit=temperature_unit,
+        check_temperature=check_temperature,
     )
 
 
