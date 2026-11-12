@@ -17,6 +17,9 @@ env/
 # Fichiers de sortie temporaires
 _tmp_*.docx
 *_standardise.docx
+# Documents Word : ignorés, sauf le document de démonstration utilisé par les tests
+*.docx
+!partie exp.docx
 
 # Préférences locales (écrites par l'UI)
 rules_config.json
@@ -25,3 +28,5 @@ rules_config.json
 build/
 dist/
 *.egg-info/
+REGLES_SCIENTIFIC_WRITING_TIPS.md
+Scientific Writing Tips.pdf
