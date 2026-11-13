@@ -57,7 +57,7 @@ def test_styled_edit_keeps_font_of_paragraph():
 def test_styled_edit_keeps_formatting_of_surrounding_runs():
     doc = NewDocument()
     p = doc.add_paragraph()
-    before = p.add_run("Composé 3 : ")
+    before = p.add_run("Composé 3: ")
     before.font.name = "Arial"
     before.italic = True
     p.add_run("1H NMR (400 MHz, CDCl3, 298 K) δ 7.26 (s, 1H)")
@@ -65,7 +65,7 @@ def test_styled_edit_keeps_formatting_of_surrounding_runs():
     process_document(doc, build_default_registry())
 
     first = p.runs[0]
-    assert first.text == "Composé 3 : "
+    assert first.text == "Composé 3: "
     assert first.font.name == "Arial"
     assert first.italic is True
 

@@ -428,6 +428,14 @@ règles RMN. Paramètres éditables :
 - **Solvants RMN** : table « écrit » → « devient » (balisage `*italique*`,
   indices automatiques), même fonctionnement que les multiplicités ; voir
   « Solvants configurables ».
+- **Règle Ponctuation** : supprime les espaces avant `:` et `;`, réduit la
+  ponctuation doublée (`,,` `;;` `::` `..`) ; deux ponctuations différentes
+  collées sont seulement signalées.
+- **Remplacer la virgule décimale par un point** (coché par défaut) : `7,26 (s`
+  devient `7.26 (s` dans les signaux RMN, seulement si le cas est non ambigu ;
+  sinon la liste est laissée telle quelle et signalée. Décoché : ancien
+  comportement. Un utilisateur ayant déjà enregistré ses paramètres reçoit la
+  valeur par défaut (cochée) car le champ est absent de son fichier.
 - **Contrôler la température** (coché par défaut) : décoché, le 3ᵉ élément de
   la parenthèse est laissé tel quel (pas de marqueur si absente, pas de
   normalisation ni de signalement d'unité) ; une parenthèse de moins de 2 ou de

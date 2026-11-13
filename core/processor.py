@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional, Tuple
 
 from core import docx_io
 from core.rules.base import Action, ActionKind
@@ -40,6 +40,11 @@ class ParagraphReport:
     #: Emplacement lisible hors corps du texte (``'Tableau 1, ligne 2, …'``,
     #: ``'En-tête (section 1), …'``). Vide pour un paragraphe du corps.
     location: str = ""
+    #: Mise en forme réelle (gras, italique, exposant, indice) du texte avant /
+    #: après traitement : ``(début, fin, style)``. ``None`` si inconnue (mode
+    #: texte, structure Word non prise en charge). Affichage seulement.
+    original_formats: Optional[List[Tuple[int, int, str]]] = None
+    new_formats: Optional[List[Tuple[int, int, str]]] = None
 
     @property
     def label(self) -> str:
@@ -162,6 +167,7 @@ def process_document(
             continue
         current = text
         actions: List[Action] = []
+        original_formats = docx_io.paragraph_formats(paragraph)
         # Chaque règle écrit son édition IMMÉDIATEMENT dans le paragraphe : la
         # règle suivante reçoit ainsi un texte identique à celui du document,
         # et son ``replaced_text`` y est retrouvable. Règles stylisées et non
@@ -199,6 +205,8 @@ def process_document(
                 new_text=paragraph.text,
                 actions=actions,
                 location=location,
+                original_formats=original_formats,
+                new_formats=docx_io.paragraph_formats(paragraph),
             )
         )
         if annotate and docx_io.add_paragraph_comment(
@@ -221,6 +229,7 @@ def available_rules() -> List:
     from core.rules.ir import IrRule
     from core.rules.melting_point import MeltingPointRule
     from core.rules.analysis_order import AnalysisOrderRule
+    from core.rules.punctuation import PunctuationRule
     from core.rules.units import UnitsRule
     from core.rules.rf import RfRule
     from core.rules.nmr_hetero import (
@@ -231,6 +240,7 @@ def available_rules() -> List:
     )
 
     return [
+        PunctuationRule(),
         OneHNmrRule(),
         ThirteenCNmrRule(),
         NineteenFNmrRule(),

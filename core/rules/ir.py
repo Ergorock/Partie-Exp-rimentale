@@ -66,6 +66,9 @@ _BAND_RE = re.compile(
 # Virgule décimale (``1715,5``) : découpage de la liste ambigu.
 _DECIMAL_COMMA_RE = re.compile(r"\d,\d")
 
+# Légende « IR intensities / intensity / inten. » : paragraphe ignoré.
+_INTENSITY_WORD_RE = re.compile(r"\s*inten", re.IGNORECASE)
+
 # Label IR isolé (pas au milieu d'un mot : FTIR, DIRECT…).
 _LABEL_RE = re.compile(r"(?<![A-Za-z])IR(?![A-Za-z])")
 # Indice qu'une mention de IR ouvre une vraie entrée : parenthèse, symbole,
@@ -92,6 +95,9 @@ class IrRule(Rule):
         found = []
         for match in _LABEL_RE.finditer(text):
             at_start = not text[: match.start()].strip()
+            # « IR intensities… » (légende des intensités) n'est pas une entrée IR.
+            if _INTENSITY_WORD_RE.match(text, match.end()):
+                continue
             if at_start or _DATA_HINT_RE.match(text, match.end()):
                 found.append(match)
         return found

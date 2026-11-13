@@ -48,6 +48,7 @@ core/                   Cœur de traitement, SANS aucune dépendance d'interface
     nmr_hetero.py       Règles 19F, 31P, 11B et 29Si NMR (même base)
     units.py            Règle Unités (espace insécable nombre-unité, procédure)
     analysis_order.py   Règle Ordre des analyses (contrôle intra-paragraphe, sans édition)
+    punctuation.py      Règle Ponctuation (espace avant : ou ;, ponctuation doublée)
     hrms.py             Règle HRMS (format ACS + vérification des masses)
     ir.py               Règle IR (méthode, bandes entières triées, cm⁻¹)
     rf.py               Règle Rf (f en indice Word, phase stationnaire, éluant)
@@ -90,7 +91,10 @@ standardisation_rmn.spec  Build PyInstaller : StandardisationRMN.exe (+ -cli.exe
      processor ajoute alors un `FLAGGED` et arrête la chaîne pour ce paragraphe.
    - `apply_styled_edit` copie le `rPr` des runs conservés et donne aux segments
      le `rPr` du run dominant de la portion remplacée (sans gras / italique /
-     `vertAlign`). Son repli ne supprime jamais de texte.
+     `vertAlign`). L'italique, l'exposant et l'indice Word des caractères
+     CONSERVÉS (diff ancien / nouveau texte de la portion) sont reportés sur les
+     segments (`J`, `³` de `³J`, `H–H` en indice…) ; le gras n'est pas reporté.
+     Son repli ne supprime jamais de texte.
 4. Avec `annotate` (défaut de `standardize_file`, du CLI et de l'UI ;
    défaut `False` pour `process_document`), chaque paragraphe du corps qui
    porte une action `FLAGGED` / `PLACEHOLDER` reçoit un commentaire Word
@@ -228,6 +232,15 @@ tests.
   Désactivable par `check_temperature` (défaut `True`) : à `False`, le 3e élément
   est laissé tel quel (ni marqueur, ni unité, ni signalement d'unité) ; seule la
   structure de la parenthèse (< 2 ou > 3 éléments) reste signalée.
+- **Virgule décimale des signaux RMN** (décision du 2026-11-13, option
+  `convert_decimal_comma`, défaut `True`) : `7,26 (s` -> `7.26 (s`,
+  `J = 8,4 Hz` -> `8.4 Hz` (`CORRECTED` « Virgule décimale remplacée par un
+  point : … »). Seulement si NON ambiguë (`nmr_common.convert_decimal_commas` :
+  1-3 chiffres, virgule, 1-2 décimales, suivis de `(`, `Hz`, tiret de plage ou
+  fin). Cas ambigus (`170,165 (`, 3 décimales, `J = 8,4, 2,1 Hz`) ou liste
+  encore non parsable après conversion -> liste INTACTE + `FLAGGED`. Option à
+  `False` : ancien comportement (liste conservée + `FLAGGED`). Les règles IR,
+  HRMS, Rf et m.p. ne convertissent toujours pas.
 - **Signe moins** : `-`, `−` (U+2212) et `–` (U+2013) acceptés devant un
   déplacement ; le signe est conservé tel qu'écrit.
 - **Label seul en gras** (`¹H NMR`, `HRMS`), jamais la parenthèse qui suit
@@ -338,6 +351,19 @@ tests.
   paragraphe seulement : l'ordre entre paragraphes n'est pas contrôlé.
   Dérogation assumée à « applies vrai aussi sur la sortie » : cette règle ne
   produit pas de sortie.
+
+### Ponctuation (`core/rules/punctuation.py`, `tests/test_rule_punctuation.py`)
+
+- Première règle du catalogue (elle nettoie avant les règles d'analyse).
+  Supprime les espaces (ordinaires, insécables) AVANT `:` et `;` ; réduit `,,`
+  `;;` `::` et `..` (pas `...`). Deux ponctuations différentes collées (`,;`,
+  `;,`, `:;`, `,.`…) -> `FLAGGED`, texte conservé. `.,` / `.;` ignorés
+  (abréviations). Édition par diff (`apply_text_edit`).
+- Comme l'ordre des analyses, `applies` n'est vrai QUE s'il y a quelque chose à
+  corriger ou signaler (dérogation assumée, pour ne pas gonfler le score).
+- **IR** : « IR intensities / inten. » (légende) n'est pas une entrée IR.
+- **RMN** : pour un signal non analysable, seul ce signal est surligné
+  (`Action.highlights`) ; toute la liste si le cas est global (virgule ambiguë).
 
 ### m.p. / b.p. (`core/rules/melting_point.py`, `tests/test_rule_melting_point.py`)
 

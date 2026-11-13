@@ -62,6 +62,35 @@ def paragraph_texts(document: DocumentObject) -> List[str]:
     return [p.text for p in document.paragraphs]
 
 
+def paragraph_formats(paragraph: Paragraph) -> Optional[List[Tuple[int, int, str]]]:
+    """Mise en forme directe des runs : liste ``(début, fin, style)``.
+
+    ``style`` ∈ ``b`` (gras), ``i`` (italique), ``sup`` (exposant), ``sub``
+    (indice). Les positions sont des index dans ``paragraph.text``. Sert à
+    l'aperçu de l'interface (affichage seulement). Renvoie ``None`` si les
+    runs ne reconstituent pas exactement le texte (lien hypertexte, champ…) :
+    l'appelant n'affiche alors aucune mise en forme.
+    """
+    formats: List[Tuple[int, int, str]] = []
+    pos = 0
+    for run in paragraph.runs:
+        length = len(run.text)
+        if length:
+            flags = (
+                ("b", run.bold),
+                ("i", run.italic),
+                ("sup", run.font.superscript),
+                ("sub", run.font.subscript),
+            )
+            for kind, value in flags:
+                if value:
+                    formats.append((pos, pos + length, kind))
+        pos += length
+    if pos != len(paragraph.text):
+        return None
+    return formats
+
+
 # En-têtes / pieds de page d'une section : (libellé, attribut python-docx).
 _HEADER_FOOTER_PARTS = (
     ("En-tête", "header"),
@@ -294,6 +323,69 @@ def _segment_run(paragraph: Paragraph, segment: "StyledSegment", rpr):
     return element
 
 
+def _inherited_formats(runs, start: int, end: int, segments) -> List[Tuple[bool, bool, bool]]:
+    """Mise en forme (italique, exposant, indice) reportée sur le texte des segments.
+
+    Le texte de la portion remplacée est comparé (diff) au texte des segments :
+    un caractère conservé reprend l'italique / l'exposant / l'indice Word de son
+    caractère d'origine ; un caractère modifié ou inséré n'hérite de rien. Le
+    gras n'est pas reporté (il est fixé par la règle : label seul en gras).
+    """
+    # Format de chaque caractère d'origine de la portion [start, end).
+    per_char: List[Tuple[bool, bool, bool]] = []
+    for run in runs:
+        flags = (bool(run.italic), bool(run.font.superscript), bool(run.font.subscript))
+        per_char.extend([flags] * len(run.text))
+    old_flags = per_char[start:end]
+    old_portion = "".join(r.text for r in runs)[start:end]
+
+    new_text = "".join(s.text for s in segments)
+    result = [(False, False, False)] * len(new_text)
+    matcher = SequenceMatcher(a=old_portion, b=new_text, autojunk=False)
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            for k in range(i2 - i1):
+                result[j1 + k] = old_flags[i1 + k]
+    return result
+
+
+def _styled_elements(paragraph: Paragraph, segments, seg_rpr, inherited) -> list:
+    """Runs des segments stylisés, découpés là où la mise en forme reportée change."""
+    elements = []
+    pos = 0
+    for segment in segments:
+        text = segment.text
+        if not text:
+            continue
+        flags = inherited[pos: pos + len(text)]
+        pos += len(text)
+        k = 0
+        while k < len(text):
+            m = k
+            while m < len(text) and flags[m] == flags[k]:
+                m += 1
+            italic, sup, sub = flags[k]
+            piece = StyledSegmentLike(
+                text[k:m],
+                segment.bold,
+                segment.italic or italic,
+                segment.subscript or sub,
+            )
+            element = _segment_run(paragraph, piece, seg_rpr)
+            if sup:
+                Run(element, paragraph).font.superscript = True
+            elements.append(element)
+            k = m
+    return elements
+
+
+class StyledSegmentLike:
+    """Segment minimal (texte, gras, italique, indice) pour ``_segment_run``."""
+
+    def __init__(self, text: str, bold: bool, italic: bool, subscript: bool) -> None:
+        self.text, self.bold, self.italic, self.subscript = text, bold, italic, subscript
+
+
 def _replace_runs(paragraph: Paragraph, new_elements) -> None:
     """Remplace les runs TEXTUELS du paragraphe par ``new_elements``, à leur place.
 
@@ -444,7 +536,10 @@ def apply_styled_edit(
         if before:
             elements.append(_make_run(paragraph, before, run._element.rPr))
     # Portion remplacée : un run par segment stylisé.
-    elements.extend(_segment_run(paragraph, s, seg_rpr) for s in segments if s.text)
+    # Italique / exposant / indice Word déjà présents sur des caractères
+    # conservés (J italique, 3 de ³J exposant, H–H en indice…) sont reportés.
+    inherited = _inherited_formats(runs, start, end, segments)
+    elements.extend(_styled_elements(paragraph, segments, seg_rpr, inherited))
     # Partie APRÈS la portion.
     for run, run_start in zip(runs, starts):
         if run_start + len(run.text) > end:

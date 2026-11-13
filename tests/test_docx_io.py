@@ -171,3 +171,24 @@ def test_subscript_replaces_inherited_vertical_alignment():
     by_text = {r.text: r for r in p.runs}
     assert not by_text["A"].font.superscript and not by_text["A"].font.subscript
     assert by_text["B"].font.subscript is True and not by_text["B"].font.superscript
+
+
+# --- Italique / exposant / indice Word conservés dans une portion réécrite ---------
+
+def test_styled_edit_keeps_inline_italic_sup_sub():
+    from docx import Document
+    from core.processor import build_registry, process_document
+
+    doc = Document()
+    p = doc.add_paragraph()
+    p.add_run("1H NMR (400 MHz, CDCl3, 298 K) δ 1.50 (p, ")
+    p.add_run("3").font.superscript = True
+    p.add_run("J").italic = True
+    p.add_run("H–H").font.subscript = True
+    p.add_run(" = 7.0 Hz, 2H), 7.28 (m, 2H)")
+    process_document(doc, build_registry())
+    assert "(p, 3JH–H = 7.0 Hz, 2H), 7.28 (m, 2H)" in p.text  # signaux non analysables : intacts
+    by_text = {r.text: r for r in p.runs if r.text in ("3", "J", "H–H")}
+    assert by_text["3"].font.superscript
+    assert by_text["J"].italic
+    assert by_text["H–H"].font.subscript

@@ -138,6 +138,8 @@ class RmnConfig:
     #: Contrôle de la température (obligatoire, marqueur, unité) ; désactivé :
     #: le 3e élément de la parenthèse est laissé tel quel.
     check_temperature: bool = True
+    #: Virgule décimale sans ambiguïté dans les signaux RMN (``7,26 (s``) -> point.
+    convert_decimal_comma: bool = True
     italic_j: bool = True  # constante de couplage J en italique (usage ACS/RSC)
     hrms_ppm_tolerance: float = 5.0  # écart HRMS trouvé / calculé toléré (ppm)
     hrms_abs_tolerance: float = 0.003  # écart HRMS absolu toléré (Da), en plus des ppm
@@ -203,6 +205,7 @@ def config_to_dict(config: RmnConfig) -> dict:
         "italic_delta": config.italic_delta,
         "temperature_unit": config.temperature_unit,
         "check_temperature": config.check_temperature,
+        "convert_decimal_comma": config.convert_decimal_comma,
         "italic_j": config.italic_j,
         "hrms_ppm_tolerance": config.hrms_ppm_tolerance,
         "hrms_abs_tolerance": config.hrms_abs_tolerance,
@@ -296,6 +299,12 @@ def config_from_dict(data: dict) -> RmnConfig:
     if isinstance(raw_check_temp, bool):
         check_temperature = raw_check_temp
 
+    # convert_decimal_comma : bool.
+    convert_decimal_comma = defaults.convert_decimal_comma
+    raw_dec_comma = data.get("convert_decimal_comma")
+    if isinstance(raw_dec_comma, bool):
+        convert_decimal_comma = raw_dec_comma
+
     # italic_j : bool.
     italic_j = defaults.italic_j
     raw_italic_j = data.get("italic_j")
@@ -332,6 +341,7 @@ def config_from_dict(data: dict) -> RmnConfig:
         italic_delta=italic_delta,
         temperature_unit=temperature_unit,
         check_temperature=check_temperature,
+        convert_decimal_comma=convert_decimal_comma,
     )
 
 

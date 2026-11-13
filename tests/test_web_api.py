@@ -46,7 +46,7 @@ def _docx(tmp_path, *paragraphs, name="in.docx"):
 
 def test_initial_state_lists_rules_and_settings():
     state = Api(FakeDialogs()).get_state()
-    assert [r["name"] for r in state["rules"]] == ["1H NMR", "13C NMR", "19F NMR", "31P NMR", "11B NMR", "29Si NMR", "HRMS", "IR", "Rf", "m.p. / b.p.", "Unités", "Ordre des analyses"]
+    assert [r["name"] for r in state["rules"]] == ["Ponctuation", "1H NMR", "13C NMR", "19F NMR", "31P NMR", "11B NMR", "29Si NMR", "HRMS", "IR", "Rf", "m.p. / b.p.", "Unités", "Ordre des analyses"]
     assert state["settings"]["sort_order"] == "desc"
     assert state["defaults"] == cfg.config_to_dict(RmnConfig())
     assert state["settings"]["solvents"]["dmso-d6"] == "DMSO-*d*6"

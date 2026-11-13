@@ -616,6 +616,32 @@ _PAREN_RE = re.compile(r"\(([^()]*)\)")
 # Virgule décimale (ex. '7,26') : rend le découpage sur les virgules ambigu.
 _DECIMAL_COMMA_RE = re.compile(r"\d,\d")
 
+# Virgule décimale SANS ambiguïté : entier de 1 à 3 chiffres, virgule, 1 à 2
+# décimales, puis une parenthèse, ``Hz``, un tiret de plage ou la fin. Une
+# liste collée (``170,165 (``), une 3e décimale ou un point déjà présent
+# (``8.4,2.1``) ne correspondent pas : la liste reste alors non parsable.
+_FIXABLE_COMMA_RE = re.compile(
+    rf"(?<![\d.,])(\d{{1,3}}),(\d{{1,2}})(?!\d)(?=\s*(?:\(|Hz\b|[{_MINUS}]|$))"
+)
+
+
+def convert_decimal_commas(body: str) -> Tuple[str, List[Tuple[str, str]]]:
+    """Remplace les virgules décimales non ambiguës par un point.
+
+    Retourne ``(texte, [(avant, après), …])``. Seule la virgule change : les
+    chiffres sont recopiés tels quels.
+    """
+    changes: List[Tuple[str, str]] = []
+
+    def _fix(match: re.Match) -> str:
+        before = match.group(0)
+        after = f"{match.group(1)}.{match.group(2)}"
+        changes.append((before, after))
+        return after
+
+    return _FIXABLE_COMMA_RE.sub(_fix, body), changes
+
+
 # Ponctuation terminale de la liste des signaux (ex. point final).
 _TRAILING_PUNCT_RE = re.compile(r"\s*([.;])\s*$")
 

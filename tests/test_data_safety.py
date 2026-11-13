@@ -81,11 +81,46 @@ def test_unparsable_body_is_kept_verbatim():
 
 # --- Virgule décimale ---------------------------------------------------------
 
-def test_decimal_comma_is_flagged_and_kept():
-    body = "7,26 (s, 1H), 1,20 (t, 3H)"
-    result = RULE_1H.apply(f"1H RMN (400 MHz, CDCl3, 298 K) δ {body}")
+HEAD = "1H RMN (400 MHz, CDCl3, 298 K) δ "
+
+
+def test_decimal_comma_is_replaced_by_a_point():
+    result = RULE_1H.apply(HEAD + "1,20 (t, J = 7,1 Hz, 3H), 7,26 (s, 1H)")
+    assert result.new_text.endswith("δ (ppm) = 7.26 (s, 1\xa0H), 1.20 (t, J = 7.1 Hz, 3\xa0H)")
+    assert not _flagged(result)
+    fixes = [a.message for a in result.actions if a.kind == ActionKind.CORRECTED]
+    assert any(m.startswith("Virgule décimale remplacée par un point : ") for m in fixes)
+
+
+def test_decimal_comma_in_range():
+    result = RULE_1H.apply(HEAD + "7,41–7,50 (m, 2H)")
+    assert "7.41\xa0–\xa07.50 (m, 2\xa0H)" in result.new_text
+
+
+def test_ambiguous_comma_list_is_flagged_and_kept():
+    body = "7,261 (s, 1H), 1,20, 7,1 (d, 3H)"   # 3 décimales / liste collée
+    result = RULE_1H.apply(HEAD + body)
     assert result.new_text.endswith(f"δ (ppm) = {body}")
     assert _flagged(result)
+
+
+def test_decimal_comma_kept_when_option_disabled():
+    cfg.set_config(RmnConfig(convert_decimal_comma=False))
+    body = "7,26 (s, 1H), 1,20 (t, 3H)"
+    result = RULE_1H.apply(HEAD + body)
+    assert result.new_text.endswith(f"δ (ppm) = {body}")
+    assert _flagged(result)
+
+
+def test_decimal_comma_output_is_idempotent():
+    first = RULE_1H.apply(HEAD + "7,26 (s, 1H)").new_text
+    assert RULE_1H.apply(first).new_text == first
+
+
+def test_decimal_comma_config_roundtrip():
+    from core.config import config_from_dict, config_to_dict
+    assert config_from_dict(config_to_dict(RmnConfig(convert_decimal_comma=False))).convert_decimal_comma is False
+    assert config_from_dict({"convert_decimal_comma": "oui"}).convert_decimal_comma is True
 
 
 # --- Multiplicité 13C ---------------------------------------------------------

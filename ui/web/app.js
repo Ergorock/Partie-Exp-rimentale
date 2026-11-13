@@ -64,9 +64,28 @@ const HL_TITLES = {
   flagged: "À vérifier",
   placeholder: "Marqueur inséré (donnée manquante)",
 };
-function highlightHtml(text, spans) {
+// Mise en forme RÉELLE du document (gras, italique, exposant, indice) : les
+// runs Word sont lus en Python (docx_io.paragraph_formats) ; ici, affichage seul.
+const FORMAT_TAGS = { b: "b", i: "i", sup: "sup", sub: "sub" };
+function renderFormatted(text, formats) {
+  if (!formats) return renderNmr(text);
+  const cuts = new Set([0, text.length]);
+  for (const [a, b] of formats) {
+    cuts.add(a);
+    cuts.add(b);
+  }
+  const points = [...cuts].filter((c) => c >= 0 && c <= text.length).sort((x, y) => x - y);
+  let html = "";
+  for (let k = 0; k < points.length - 1; k++) {
+    const [a, b] = [points[k], points[k + 1]];
+    const tags = formats.filter(([s, e]) => s <= a && e >= b).map(([, , kind]) => FORMAT_TAGS[kind]).filter(Boolean);
+    html += tags.map((t) => `<${t}>`).join("") + escapeHtml(text.slice(a, b)) + tags.reverse().map((t) => `</${t}>`).join("");
+  }
+  return html;
+}
+function highlightHtml(text, spans, formats) {
   const box = document.createElement("div");
-  box.innerHTML = renderNmr(text);
+  box.innerHTML = renderFormatted(text, formats);
   if (!spans || spans.length === 0) return box.innerHTML;
   const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT);
   const nodes = [];
@@ -272,12 +291,12 @@ function renderEntry(p) {
   const fixesHtml = fixes.length
     ? `<ul class="fixes">${fixes.map((a) => `<li>${escapeHtml(a.message)}</li>`).join("")}</ul>`
     : "";
-  const beforeHtml = p.changed ? `<p class="before">${escapeHtml(p.before)}</p>` : "";
+  const beforeHtml = p.changed ? `<p class="before">${renderFormatted(p.before, p.before_formats)}</p>` : "";
 
   li.innerHTML = `
     <p class="entry-where">${escapeHtml(p.label)}</p>
     <div>
-      <p class="entry-text">${highlightHtml(p.after, p.spans)}</p>
+      <p class="entry-text">${highlightHtml(p.after, p.spans, p.after_formats)}</p>
       ${fixes.length || p.changed ? `<details><summary>Voir l'original et les corrections</summary>${beforeHtml}${fixesHtml}</details>` : ""}
     </div>
     <div class="notes">${noteHtml}</div>`;
@@ -442,6 +461,7 @@ function fillSettings(s) {
   $("italic-delta").checked = s.italic_delta;
   $("italic-j").checked = s.italic_j;
   $("check-temperature").checked = s.check_temperature !== false;
+  $("convert-decimal-comma").checked = s.convert_decimal_comma !== false;
   $("hrms-ppm").value = s.hrms_ppm_tolerance;
   $("hrms-abs").value = s.hrms_abs_tolerance;
   for (const key of THRESHOLD_KEYS) $(`th-${key}`).value = s.evaluation_thresholds[key];
@@ -458,6 +478,7 @@ function collectSettings() {
     italic_delta: $("italic-delta").checked,
     italic_j: $("italic-j").checked,
     check_temperature: $("check-temperature").checked,
+    convert_decimal_comma: $("convert-decimal-comma").checked,
     hrms_ppm_tolerance: Number($("hrms-ppm").value),
     hrms_abs_tolerance: Number($("hrms-abs").value),
     hrms_abs_tolerance: Number($("hrms-abs").value),

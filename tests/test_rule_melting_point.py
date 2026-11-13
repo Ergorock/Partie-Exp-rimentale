@@ -205,7 +205,7 @@ def test_in_chain_with_rf_and_nmr():
     )
     both = "Rf = 0.30 (SiO2; A/B 1:1) ; mp 120-121 °C"
     assert process_texts([both], build_registry()).paragraphs[0].new_text == (
-        f"Rf = 0.30 (SiO₂; A/B 1:1) ; m.p. 120{NB}–{NB}121{NB}°C"
+        f"Rf = 0.30 (SiO₂; A/B 1:1); m.p. 120{NB}–{NB}121{NB}°C"
     )
 
 

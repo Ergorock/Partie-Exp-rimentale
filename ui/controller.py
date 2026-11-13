@@ -48,6 +48,10 @@ def report_to_dict(report: ProcessingReport) -> dict:
                 "label": pr.label,
                 "before": pr.original_text,
                 "after": pr.new_text,
+                # Mise en forme réelle du document (None si inconnue) : l'UI
+                # l'affiche telle quelle au lieu de la deviner depuis le texte.
+                "before_formats": pr.original_formats,
+                "after_formats": pr.new_formats,
                 "changed": pr.changed,
                 # Surlignage dans le texte final (calculé dans core, affiché par l'UI).
                 "spans": compute_spans(pr.original_text, pr.new_text, pr.actions, pr.changed),

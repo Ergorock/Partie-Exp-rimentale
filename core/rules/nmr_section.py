@@ -293,8 +293,28 @@ class NmrSectionRule(Rule):
     def _signals_text(self, body: str, config, actions: List[Action]) -> str:
         """Trie et reformate les signaux, ou les laisse tels quels si non parsables."""
         body, terminal = nmr_common.split_trailing_punctuation(body)
+        original_body = body
+        comma_changes: List[tuple] = []
+        if config.convert_decimal_comma:
+            body, comma_changes = nmr_common.convert_decimal_commas(body)
         signals, all_parsable = nmr_common.parse_signals(body, config)
+        if comma_changes and all_parsable:
+            actions.append(Action(
+                ActionKind.CORRECTED,
+                "Virgule décimale remplacée par un point : "
+                + ", ".join(f"{a} → {b}" for a, b in comma_changes),
+                self.name,
+            ))
         if not all_parsable:
+            body = original_body  # jamais de réécriture partielle
+            # Signaux fautifs (déplacement illisible, texte inconnu…) : seuls
+            # ceux-là sont surlignés ; sinon (virgule décimale ambiguë…) toute
+            # la liste.
+            raw_signals, _ = nmr_common.parse_signals(body, config)
+            culprits = tuple(
+                s.shift for s in raw_signals
+                if s.shift_high == float("-inf") and s.shift in body
+            ) or (body,)
             # Règle de sûreté : liste conservée telle quelle, rien n'est réécrit.
             actions.append(
                 Action(
@@ -302,7 +322,7 @@ class NmrSectionRule(Rule):
                     "Un ou plusieurs signaux n'ont pas pu être analysés : "
                     "liste des signaux laissée telle quelle, vérification manuelle.",
                     self.name,
-                    (body,),
+                    culprits,
                 )
             )
             return body + terminal
