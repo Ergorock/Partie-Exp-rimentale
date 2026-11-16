@@ -86,22 +86,72 @@ def compute_spans(
         for excerpt in action.highlights:
             raw += [(s, e, "flagged") for s, e in _find_all(after, excerpt)]
 
+    return _merge(raw, len(after))
+
+
+def _merge(raw: List[tuple], length: int) -> List[Dict[str, object]]:
+    """Empans triés, sans recouvrement (priorité), contigus de même cas fusionnés."""
     if not raw:
         return []
-    kinds: List[Optional[str]] = [None] * len(after)
+    kinds: List[Optional[str]] = [None] * length
     for start, end, kind in raw:
-        for i in range(max(0, start), min(len(after), end)):
+        for i in range(max(0, start), min(length, end)):
             if kinds[i] is None or _PRIORITY[kind] > _PRIORITY[kinds[i]]:
                 kinds[i] = kind
     spans: List[Dict[str, object]] = []
     i = 0
-    while i < len(after):
+    while i < length:
         if kinds[i] is None:
             i += 1
             continue
         j = i
-        while j < len(after) and kinds[j] == kinds[i]:
+        while j < length and kinds[j] == kinds[i]:
             j += 1
         spans.append({"start": i, "end": j, "kind": kinds[i]})
         i = j
     return spans
+
+
+def _source_changes(source: str, target: str) -> set:
+    """Positions de ``source`` modifiées ou supprimées pour obtenir ``target``.
+
+    Une pure insertion marque les mots qui l'entourent (« J=8 » -> « J = 8 »).
+    """
+    if source == target:
+        return set()
+    old, new = _tokens(source), _tokens(target)
+    matcher = difflib.SequenceMatcher(
+        None, [m.group(0) for m in old], [m.group(0) for m in new], autojunk=False
+    )
+    positions: set = set()
+    for tag, i1, i2, _, _ in matcher.get_opcodes():
+        if tag in ("replace", "delete"):
+            touched = old[i1:i2]
+        elif tag == "insert":
+            touched = old[max(0, i1 - 1):i1 + 1]
+        else:
+            continue
+        for m in touched:
+            positions.update(range(m.start(), m.end()))
+    return positions
+
+
+def source_spans(
+    original: str, rule_input: str, rule_output: str, actions: Iterable[Action]
+) -> List[Dict[str, object]]:
+    """Empans à surligner dans le texte D'ORIGINE pour une règle (mode évaluation).
+
+    Les règles s'appliquent en chaîne : ``rule_input`` est le texte reçu par la
+    règle, ``rule_output`` celui qu'elle produit. Seules les positions de
+    ``original`` que CETTE règle modifie sont ``corrected`` ; les extraits
+    signalés retrouvés tels quels dans l'original sont ``flagged``. Un marqueur
+    (donnée manquante) n'a pas de position dans l'original.
+    """
+    actions = list(actions)
+    changed = _source_changes(original, rule_output) - _source_changes(original, rule_input)
+    raw: List[tuple] = [(i, i + 1, "corrected") for i in changed]
+    for action in actions:
+        if action.kind == ActionKind.FLAGGED:
+            for excerpt in action.highlights:
+                raw += [(s, e, "flagged") for s, e in _find_all(original, excerpt)]
+    return _merge(raw, len(original))

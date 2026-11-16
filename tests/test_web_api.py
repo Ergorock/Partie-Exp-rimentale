@@ -225,3 +225,16 @@ def test_evaluate_without_sections_is_not_evaluable(tmp_path):
     src = _docx(tmp_path, "Introduction")
     ev = Api(FakeDialogs()).evaluate(src, ["1H NMR"])["evaluation"]
     assert ev["score"] is None and ev["grade"] == "Non évaluable"
+
+
+def test_run_returns_conformity_before_and_after(tmp_path):
+    src = _docx(tmp_path, CORRECT_ONLY.replace("CDCl3", "CDCl3 "))
+    out = os.path.join(tmp_path, "out.docx")
+    scores = Api(FakeDialogs()).run(src, out, ["1H NMR"], True)["scores"]
+    assert scores["before"]["score"] < scores["after"]["score"]
+    assert scores["after"]["grade"]
+
+
+def test_run_failure_has_no_scores(tmp_path):
+    src = _docx(tmp_path, CORRECT_ONLY)
+    assert Api(FakeDialogs()).run(src, src, ["1H NMR"], True)["scores"] is None

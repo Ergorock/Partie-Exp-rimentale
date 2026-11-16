@@ -56,7 +56,14 @@
 
     <section class="results" aria-live="polite">
       <div class="empty" id="empty">
-        <p>Les lignes RMN corrigées s'afficheront ici, avec ce qui reste à vérifier. « Évaluer » note le document sans le modifier.</p>
+        <p class="demo-intro">Chaque ligne RMN du document ressort ainsi : corrigée, avec en marge ce qu'il reste à vérifier.</p>
+        <ol class="entries demo" id="demo"></ol>
+        <p class="demo-hint">Déposez un document Word à gauche. « Standardiser » écrit une copie corrigée ; « Évaluer sans modifier » note le document tel qu'il est.</p>
+      </div>
+
+      <div class="filter views" id="views" role="group" aria-label="Résultat affiché" hidden>
+        <button type="button" data-view="report" aria-pressed="true">Standardisation</button>
+        <button type="button" data-view="evaluation" aria-pressed="false">Évaluation</button>
       </div>
 
       <div id="report" hidden>
@@ -64,12 +71,26 @@
           <div>
             <p class="headline" id="headline"></p>
             <p class="subline" id="subline"></p>
+            <p class="shift" id="shift" hidden>
+              <span class="shift-num shift-before"><span class="sr">Avant : </span><span id="shift-before"></span></span>
+              <span class="shift-arrow" aria-hidden="true">→</span>
+              <span class="shift-num"><span class="sr">Après : </span><span id="shift-after"></span></span>
+              <span class="eval-grade" id="shift-grade"></span>
+              <span class="shift-caption">de sections conformes</span>
+            </p>
           </div>
           <button type="button" id="open-output">Ouvrir dans Word</button>
         </div>
-        <div class="filter" role="group" aria-label="Filtrer les paragraphes">
-          <button type="button" data-filter="review" aria-pressed="true" id="filter-review"></button>
-          <button type="button" data-filter="all" aria-pressed="false" id="filter-all"></button>
+        <div class="toolbar">
+          <div class="filter" role="group" aria-label="Filtrer les paragraphes">
+            <button type="button" data-filter="review" aria-pressed="true" id="filter-review"></button>
+            <button type="button" data-filter="all" aria-pressed="false" id="filter-all"></button>
+          </div>
+          <div class="step" id="step">
+            <button type="button" id="prev-review" aria-keyshortcuts="k" title="Paragraphe à vérifier précédent (touche K)">Précédent</button>
+            <span class="step-pos" id="step-pos" aria-live="polite"></span>
+            <button type="button" id="next-review" aria-keyshortcuts="j" title="Paragraphe à vérifier suivant (touche J)">Suivant à vérifier</button>
+          </div>
         </div>
         <p class="legend" aria-label="Légende des couleurs">
           <span class="l-fix"><i></i>Texte corrigé automatiquement</span>
@@ -99,6 +120,10 @@
 
         <section class="eval-block" id="eval-items-block">
           <h3>Sections non conformes</h3>
+          <p class="legend" aria-label="Légende des couleurs">
+            <span class="l-fix"><i></i>Passage que la standardisation corrigera</span>
+            <span class="l-flag"><i></i>Passage à vérifier</span>
+          </p>
           <ol class="entries" id="eval-items"></ol>
         </section>
       </div>

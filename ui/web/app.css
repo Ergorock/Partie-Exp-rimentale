@@ -196,14 +196,21 @@ details.rules-fold .rules { margin: 0.6rem 0 0; }
   padding: 1.5rem 2rem 3rem;
 }
 
+/* État vide : un exemple réel, rendu comme une entrée du rapport. */
 .empty {
-  height: 100%;
-  display: grid;
-  place-items: center;
-  text-align: center;
-  color: var(--muted);
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1rem;
+  max-width: 60rem;
 }
-.empty p { max-width: 32ch; font-family: var(--science); font-size: var(--step-1); }
+.demo-intro { font-family: var(--science); font-size: var(--step-2); line-height: 1.3; max-width: 34ch; }
+.demo .entry { border-bottom: 1px solid var(--rule); }
+.demo .entry details { color: var(--ink); }
+.demo-hint { color: var(--muted); max-width: 62ch; }
+
+.views { margin-bottom: 1.25rem; }
 
 .report-head {
   display: flex;
@@ -215,6 +222,48 @@ details.rules-fold .rules { margin: 0.6rem 0 0; }
 .report-head button { flex-shrink: 0; white-space: nowrap; }
 .headline { font-size: var(--step-2); font-weight: 600; line-height: 1.25; }
 .subline { color: var(--muted); margin-top: 0.25rem; }
+
+/* Score de conformité avant -> après. */
+.shift {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.6rem;
+  margin-top: 0.75rem;
+}
+.shift-num { font-size: var(--step-2); font-weight: 600; font-variant-numeric: tabular-nums; }
+.shift-before { color: var(--muted); font-weight: 400; }
+.shift-arrow { color: var(--muted); }
+.shift .eval-grade { font-size: var(--step--1); }
+.shift-caption { color: var(--muted); font-size: var(--step--1); }
+
+/* Barre filtre + navigation, gardée visible pendant le défilement. */
+.toolbar {
+  position: sticky;
+  top: -1.5rem; /* compense le padding haut de .results */
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin: 0 -2rem 0.5rem;
+  padding: 1.5rem 2rem 0.6rem;
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+}
+.toolbar .filter { margin-bottom: 0; }
+.step { display: flex; align-items: center; gap: 0.6rem; }
+.step-pos { color: var(--muted); font-size: var(--step--1); font-variant-numeric: tabular-nums; min-width: 4.5em; text-align: center; }
+.entry { scroll-margin-top: 5.5rem; }
+.entry:focus { outline: none; }
+.entry.is-current {
+  margin-inline: -0.75rem;
+  padding-inline: 0.75rem;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--review) 8%, var(--paper));
+  box-shadow: inset 3px 0 0 var(--review);
+}
 
 .filter { display: inline-flex; margin-bottom: 1rem; }
 .filter button { border-radius: 0; }
@@ -361,6 +410,7 @@ table.mult input:hover, table.mult input:focus { border-color: var(--rule); }
 @media (max-width: 760px) {
   .layout { grid-template-columns: 1fr; overflow-y: auto; }
   .results { border-left: none; border-top: 1px solid var(--rule); padding: 1.25rem 1rem 2rem; overflow: visible; }
+  .toolbar { top: 0; margin-inline: -1rem; padding: 0.6rem 1rem; }
   .entry { grid-template-columns: 1fr; }
   .notes { margin-top: 0.6rem; }
 }

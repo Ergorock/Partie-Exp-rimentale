@@ -11,7 +11,7 @@ import os
 from dataclasses import dataclass
 from typing import List
 
-from core.highlights import compute_spans
+from core.highlights import compute_spans, source_spans
 from core.evaluation import CONFORM, CORRECTED, TO_REVIEW, EvaluationReport, evaluate_file
 from core.processor import ProcessingReport, available_rules, same_file, standardize_file
 from core.rules.base import ActionKind
@@ -204,6 +204,7 @@ def evaluation_to_dict(report: EvaluationReport) -> dict:
                 "rule": item.rule_name,
                 "status": item.status,
                 "text": item.text,
+                "spans": source_spans(item.text, item.rule_input, item.rule_output, item.actions),
                 "actions": [
                     {
                         "kind": a.kind.value,

@@ -53,6 +53,13 @@ def dropped_path(event: dict) -> Optional[str]:
     return None
 
 
+def _score(outcome) -> Optional[dict]:
+    """Score et note d'une évaluation (``None`` si elle a échoué)."""
+    if not outcome.success:
+        return None
+    return {"score": outcome.report.score, "grade": outcome.report.grade}
+
+
 class WebviewDialogs:
     """Boîtes de dialogue de fichiers natives, via la fenêtre pywebview."""
 
@@ -143,11 +150,19 @@ class Api:
         outcome = run_standardization(
             input_path, output_path, set(enabled), annotate=bool(annotate)
         )
+        scores = None
+        if outcome.success:
+            # Conformité du document avant et après, avec les mêmes règles.
+            scores = {
+                "before": _score(run_evaluation(input_path, set(enabled))),
+                "after": _score(run_evaluation(outcome.output_path, set(enabled))),
+            }
         return {
             "success": outcome.success,
             "message": outcome.message,
             "output_path": outcome.output_path,
             "report": report_to_dict(outcome.report) if outcome.report else None,
+            "scores": scores,
         }
 
     def evaluate(self, input_path: str, enabled: List[str]) -> dict:

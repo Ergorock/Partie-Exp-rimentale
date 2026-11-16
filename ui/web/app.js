@@ -12,7 +12,10 @@ const state = {
   defaults: null,
   lastReport: null,
   lastOutput: "",
+  lastScores: null,
+  lastEvaluation: null,
   filter: "review",
+  cursor: -1, // index du paragraphe à vérifier sélectionné (navigation J / K)
 };
 
 const SUPERSCRIPT = { 0: "⁰", 1: "¹", 2: "²", 3: "³", 4: "⁴", 5: "⁵", 6: "⁶", 7: "⁷", 8: "⁸", 9: "⁹" };
@@ -139,6 +142,10 @@ function applyInput(result) {
   $("output-path").textContent = state.output;
   $("choose-output").disabled = false;
   showError("");
+  // Les résultats affichés concernaient le document précédent.
+  state.lastReport = null;
+  state.lastEvaluation = null;
+  showView(null);
   updateRunButton();
 }
 
@@ -215,6 +222,7 @@ async function run() {
     showError("");
     state.lastReport = result.report;
     state.lastOutput = result.output_path;
+    state.lastScores = result.scores;
     state.filter = result.report.counts.flagged + result.report.counts.placeholder > 0 ? "review" : "all";
     renderReport();
   } finally {
@@ -223,14 +231,37 @@ async function run() {
   }
 }
 
+// Vue affichée dans la zone de résultats : "report", "evaluation" ou null
+// (état vide). La bascule n'apparaît que si les deux résultats existent.
+function showView(view) {
+  $("empty").hidden = view !== null;
+  $("report").hidden = view !== "report";
+  $("evaluation").hidden = view !== "evaluation";
+  $("views").hidden = !(state.lastReport && state.lastEvaluation);
+  for (const b of document.querySelectorAll("[data-view]")) {
+    b.setAttribute("aria-pressed", String(b.dataset.view === view));
+  }
+}
+
+// Score de conformité avant / après standardisation (mêmes règles).
+function renderShift() {
+  const { before, after } = state.lastScores || {};
+  const known = before?.score != null && after?.score != null;
+  $("shift").hidden = !known;
+  if (!known) return;
+  $("shift-before").textContent = percent(before.score);
+  $("shift-after").textContent = percent(after.score);
+  $("shift-grade").textContent = after.grade;
+  $("shift-grade").dataset.tone = gradeTone(after.grade);
+}
+
 function renderReport() {
   const report = state.lastReport;
   const { corrected, placeholder } = report.counts;
   const toReview = report.paragraphs.filter((p) => p.needs_review).length;
 
-  $("empty").hidden = true;
-  $("evaluation").hidden = true;
-  $("report").hidden = false;
+  showView("report");
+  renderShift();
 
   if (report.paragraphs.length === 0) {
     $("headline").textContent = "Aucune ligne RMN trouvée dans ce document.";
@@ -263,9 +294,47 @@ function renderEntries() {
     li.className = "none-left";
     li.textContent = "Rien à vérifier : toutes les lignes ont été corrigées automatiquement.";
     list.appendChild(li);
-    return;
   }
   for (const p of shown) list.appendChild(renderEntry(p));
+  state.cursor = -1;
+  updateStep();
+}
+
+// --- Navigation entre paragraphes à vérifier (boutons, touches J / K) ----------
+
+function reviewEntries() {
+  return [...$("entries").querySelectorAll(".entry[data-review]")];
+}
+
+function updateStep() {
+  const total = reviewEntries().length;
+  $("step").hidden = total === 0;
+  $("step-pos").textContent = state.cursor < 0 ? "" : `${state.cursor + 1} sur ${total}`;
+  $("prev-review").disabled = state.cursor <= 0;
+  $("next-review").disabled = state.cursor >= total - 1;
+}
+
+function goToReview(delta) {
+  const list = reviewEntries();
+  if (list.length === 0) return;
+  const next = state.cursor < 0 ? (delta > 0 ? 0 : list.length - 1) : state.cursor + delta;
+  state.cursor = Math.max(0, Math.min(list.length - 1, next));
+  list.forEach((el, i) => el.classList.toggle("is-current", i === state.cursor));
+  const target = list[state.cursor];
+  const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  target.scrollIntoView({ block: "start", behavior: smooth ? "smooth" : "auto" });
+  target.focus({ preventScroll: true });
+  updateStep();
+}
+
+function onKey(event) {
+  if (event.ctrlKey || event.metaKey || event.altKey || $("report").hidden) return;
+  if ($("settings").open || event.target.closest("input, select, textarea")) return;
+  const key = event.key.toLowerCase();
+  if (key === "j") goToReview(1);
+  else if (key === "k") goToReview(-1);
+  else return;
+  event.preventDefault();
 }
 
 // Classe de surlignage d'une entrée : la plus grave prime (à vérifier, marqueur, corrigé).
@@ -277,6 +346,8 @@ function entryTone(actions, changed) {
 function renderEntry(p) {
   const li = document.createElement("li");
   li.className = `entry ${entryTone(p.actions, p.changed)}`;
+  li.tabIndex = -1;
+  if (p.needs_review) li.dataset.review = "";
   const notes = p.actions.filter((a) => a.kind === "flagged" || a.kind === "placeholder");
   const fixes = p.actions.filter((a) => a.kind === "corrected");
 
@@ -332,6 +403,7 @@ async function evaluate() {
       return;
     }
     showError("");
+    state.lastEvaluation = result.evaluation;
     renderEvaluation(result.evaluation);
   } finally {
     button.textContent = "Évaluer sans modifier";
@@ -340,9 +412,7 @@ async function evaluate() {
 }
 
 function renderEvaluation(ev) {
-  $("empty").hidden = true;
-  $("report").hidden = true;
-  $("evaluation").hidden = false;
+  showView("evaluation");
 
   const tone = gradeTone(ev.grade);
   $("eval-score").textContent = ev.score === null ? "—" : percent(ev.score);
@@ -419,7 +489,7 @@ function renderEvalItem(item) {
   li.innerHTML = `
     <p class="entry-where">${escapeHtml(item.label)} · ${escapeHtml(prettyRuleName(item.rule))} · ${escapeHtml(item.status)}</p>
     <div>
-      <p class="entry-text">${escapeHtml(item.text)}</p>
+      <p class="entry-text">${highlightHtml(item.text, item.spans, [])}</p>
       ${fixesHtml ? `<details open><summary>Corrections que la standardisation appliquerait</summary>${fixesHtml}</details>` : ""}
     </div>
     <div class="notes">${notesHtml || '<p class="note-ok">Corrigeable automatiquement</p>'}</div>`;
@@ -499,6 +569,40 @@ async function saveSettings() {
   if (state.lastReport) renderEntries();
 }
 
+// --- Exemple de l'état vide --------------------------------------------------------
+// Sortie réelle du traitement pour cette ligne (texte, empans et messages copiés
+// depuis core) : l'exemple utilise le même rendu qu'un vrai rapport.
+const DEMO = {
+  label: "Exemple",
+  before: "1H NMR (400 MHz, CDCl3) δ 7.26 (d, J=8,1 Hz, 2H), 7.45 (ddq, J = 8.1 Hz, 2H), 2.31 (s, 3H)",
+  after: "¹H NMR (400 MHz, CDCl₃, [??? K]) δ (ppm) = 7.26 (d, J=8,1 Hz, 2H), 7.45 (ddq, J = 8.1 Hz, 2H), 2.31 (s, 3H)",
+  changed: true,
+  needs_review: true,
+  spans: [
+    { start: 0, end: 2, kind: "corrected" },
+    { start: 17, end: 24, kind: "corrected" },
+    { start: 24, end: 31, kind: "placeholder" },
+    { start: 34, end: 42, kind: "corrected" },
+    { start: 67, end: 93, kind: "flagged" },
+  ],
+  actions: [
+    { kind: "corrected", message: "Solvant en indices Unicode : 'CDCl3' -> 'CDCl₃'." },
+    { kind: "placeholder", label: "Marqueur", message: "Température absente : marqueur '[??? K]' inséré." },
+    {
+      kind: "flagged",
+      label: "À vérifier",
+      message:
+        "Un ou plusieurs signaux n'ont pas pu être analysés : liste des signaux laissée telle quelle, vérification manuelle.",
+    },
+  ],
+};
+
+function renderDemo() {
+  const li = renderEntry(DEMO);
+  li.querySelector("details").open = true;
+  $("demo").replaceChildren(li);
+}
+
 // --- Démarrage -------------------------------------------------------------------
 
 function wire() {
@@ -514,6 +618,15 @@ function wire() {
       renderReport();
     });
   }
+  for (const b of document.querySelectorAll("[data-view]")) {
+    b.addEventListener("click", () => {
+      if (b.dataset.view === "report") renderReport();
+      else renderEvaluation(state.lastEvaluation);
+    });
+  }
+  $("prev-review").addEventListener("click", () => goToReview(-1));
+  $("next-review").addEventListener("click", () => goToReview(1));
+  document.addEventListener("keydown", onKey);
 
   $("open-settings").addEventListener("click", () => {
     fillSettings(state.settings);
@@ -545,6 +658,7 @@ async function start() {
   state.settings = initial.settings;
   state.defaults = initial.defaults;
   renderRules(initial.rules);
+  renderDemo();
   wire();
 }
 

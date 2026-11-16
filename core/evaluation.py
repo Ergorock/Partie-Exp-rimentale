@@ -85,6 +85,9 @@ class EvaluationItem:
     status: str
     actions: List[Action] = field(default_factory=list)
     text: str = ""  # texte du paragraphe tel qu'il est dans le document
+    # Texte reçu puis produit par la règle (chaîne) : sert au surlignage.
+    rule_input: str = ""
+    rule_output: str = ""
 
 
 @dataclass
@@ -210,6 +213,8 @@ def _evaluate_paragraph(label: str, text: str, registry: RuleRegistry) -> List[E
                 status=status_of(result.actions, result.new_text != current),
                 actions=list(result.actions),
                 text=text,
+                rule_input=current,
+                rule_output=result.new_text,
             )
         )
         current = result.new_text

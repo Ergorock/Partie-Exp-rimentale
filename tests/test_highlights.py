@@ -108,3 +108,39 @@ def test_spans_are_json_compatible():
     report = report_to_dict(process_texts(["Stirred 5 mL"], build_registry()))
     json.dumps(report)
     assert report["paragraphs"][0]["spans"][0].keys() == {"start", "end", "kind"}
+
+
+# --- Mode évaluation : surlignage dans le texte d'origine -------------------------
+
+def _eval_spans(text):
+    from core.evaluation import evaluate_texts
+    from ui.controller import evaluation_to_dict
+
+    items = evaluation_to_dict(evaluate_texts([text], build_registry()))["items"]
+    return {
+        item["rule"]: [(text[s["start"]:s["end"]], s["kind"]) for s in item["spans"]]
+        for item in items
+    }
+
+
+def test_evaluation_highlights_original_text():
+    text = "1H NMR (400 MHz, CDCl3) δ 7.26 (d, J=8,1 Hz, 2H), 7.45 (ddq, J = 8.1 Hz, 2H)"
+    spans = _eval_spans(text)["1H NMR"]
+    assert ("CDCl3", "corrected") in spans
+    assert ("7.45 (ddq, J = 8.1 Hz, 2H)", "flagged") in spans
+
+
+def test_evaluation_spans_belong_to_their_rule():
+    """Une correction faite par une règle précédente n'est pas imputée à la suivante."""
+    from core.highlights import source_spans
+
+    original = "a  b c"
+    after_first = "a b c"  # règle 1 : double espace
+    after_second = "a b d"  # règle 2 : c -> d
+    spans = source_spans(original, after_first, after_second, [])
+    assert [(original[s["start"]:s["end"]], s["kind"]) for s in spans] == [("c", "corrected")]
+
+
+def test_conform_text_has_no_evaluation_spans():
+    text = "Texte sans analyse."
+    assert _eval_spans(text) == {}
