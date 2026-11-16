@@ -31,7 +31,8 @@
 
       <section class="field">
         <h2>Enregistrer sous</h2>
-        <p class="path" id="output-path">Choisissez d'abord un document.</p>
+        <p class="file-name is-empty" id="output-name">Choisissez d'abord un document.</p>
+        <p class="file-dir" id="output-dir" hidden></p>
         <button type="button" class="link" id="choose-output" disabled>Changer l'emplacement…</button>
       </section>
 
@@ -49,12 +50,16 @@
         </label>
       </section>
 
-      <button type="button" class="primary" id="run" disabled>Standardiser</button>
-      <button type="button" id="evaluate" disabled>Évaluer sans modifier</button>
+      <div class="actions">
+        <button type="button" id="evaluate" disabled>Évaluer sans modifier</button>
+        <button type="button" class="primary" id="run" disabled>Standardiser</button>
+      </div>
       <p class="error" id="error" role="alert" hidden></p>
     </aside>
 
-    <section class="results" aria-live="polite">
+    <section class="results" id="results" aria-live="polite">
+      <p class="busy" id="busy" role="status" hidden><span id="busy-text"></span><span class="busy-bar" aria-hidden="true"></span></p>
+
       <div class="empty" id="empty">
         <p class="demo-intro">Chaque ligne RMN du document ressort ainsi : corrigée, avec en marge ce qu'il reste à vérifier.</p>
         <ol class="entries demo" id="demo"></ol>
@@ -207,6 +212,8 @@
         <label for="th-correct">Correct à partir de (%)</label>
         <input type="number" id="th-correct" min="0" max="100" step="1">
       </fieldset>
+
+      <p class="error" id="settings-error" role="alert" hidden></p>
 
       <div class="dialog-actions">
         <button type="button" class="link" id="reset-settings">Rétablir les valeurs par défaut</button>

@@ -156,7 +156,7 @@ button.link {
 .file-name { font-weight: 600; overflow-wrap: anywhere; }
 .file-dir { color: var(--muted); font-size: var(--step--1); overflow-wrap: anywhere; margin-bottom: 0.5rem; }
 
-.path { font-size: var(--step--1); overflow-wrap: anywhere; margin-bottom: 0.35rem; }
+.file-name.is-empty { font-weight: 400; color: var(--muted); margin-bottom: 0.35rem; }
 
 /* --- Règles -------------------------------------------------------------- */
 .rules { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 0.9rem; }
@@ -211,6 +211,28 @@ details.rules-fold .rules { margin: 0.6rem 0 0; }
 .demo-hint { color: var(--muted); max-width: 62ch; }
 
 .views { margin-bottom: 1.25rem; }
+
+/* Traitement en cours : bandeau en haut des résultats, contenu précédent atténué. */
+.busy {
+  position: sticky;
+  top: -1.5rem;
+  z-index: 2;
+  margin: -1.5rem -2rem 1rem;
+  padding: 0.7rem 2rem 0.5rem;
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink);
+}
+.busy-bar {
+  display: block;
+  height: 3px;
+  margin-top: 0.5rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent) 0 0 / 40% 100% no-repeat, var(--rule);
+  animation: busy-slide 1.1s ease-in-out infinite alternate;
+}
+@keyframes busy-slide { from { background-position: 0 0; } to { background-position: 100% 0; } }
+.results[aria-busy="true"] > :not(.busy) { opacity: 0.45; pointer-events: none; }
 
 .report-head {
   display: flex;
@@ -401,6 +423,7 @@ table.mult td:last-child { width: 1%; }
 table.mult input { font-family: var(--science); padding: 0.2rem 0.4rem; border-color: transparent; }
 table.mult input:hover, table.mult input:focus { border-color: var(--rule); }
 
+#settings-error { margin-bottom: 0.75rem; }
 .dialog-actions { display: flex; align-items: center; gap: 0.6rem; }
 .spacer { flex: 1; }
 
@@ -411,17 +434,20 @@ table.mult input:hover, table.mult input:focus { border-color: var(--rule); }
   .layout { grid-template-columns: 1fr; overflow-y: auto; }
   .results { border-left: none; border-top: 1px solid var(--rule); padding: 1.25rem 1rem 2rem; overflow: visible; }
   .toolbar { top: 0; margin-inline: -1rem; padding: 0.6rem 1rem; }
+  .busy { top: 0; margin: -1.25rem -1rem 1rem; padding-inline: 1rem; }
   .entry { grid-template-columns: 1fr; }
   .notes { margin-top: 0.6rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
+  .busy-bar { animation: none; background-size: 100% 100%; background-image: linear-gradient(var(--accent), var(--accent)); }
 }
 
 /* --- Évaluation ------------------------------------------------------------- */
 
-#evaluate { margin-top: -1rem; }
+/* Évaluer (secondaire) puis Standardiser (principal) : on note avant de corriger. */
+.actions { display: flex; flex-direction: column; gap: 0.5rem; }
 fieldset.grid .span { grid-column: 1 / -1; margin-bottom: 0; }
 
 .eval-kicker { color: var(--muted); font-size: var(--step--1); letter-spacing: 0.02em; }
@@ -474,8 +500,6 @@ fieldset.grid .span { grid-column: 1 / -1; margin-bottom: 0; }
   margin: 0 0 0.5rem;
   font-size: var(--step--1);
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
   color: var(--muted);
 }
 

@@ -139,7 +139,7 @@ function applyInput(result) {
   $("input-name").textContent = name;
   $("input-dir").textContent = dir;
   $("dropzone").dataset.state = "filled";
-  $("output-path").textContent = state.output;
+  showOutput(state.output);
   $("choose-output").disabled = false;
   showError("");
   // Les résultats affichés concernaient le document précédent.
@@ -166,8 +166,17 @@ async function chooseOutput() {
   const path = await api().choose_output(state.output);
   if (path) {
     state.output = path;
-    $("output-path").textContent = path;
+    showOutput(path);
   }
+}
+
+// Fichier de sortie : nom en évidence, dossier en dessous (comme le document d'entrée).
+function showOutput(path) {
+  const [dir, name] = splitPath(path);
+  $("output-name").textContent = name;
+  $("output-name").classList.remove("is-empty");
+  $("output-dir").textContent = dir;
+  $("output-dir").hidden = !dir;
 }
 
 // --- Règles ----------------------------------------------------------------------
@@ -209,10 +218,18 @@ function showError(message) {
   $("error").hidden = !message;
 }
 
+// Bandeau « en cours » en haut des résultats ; l'affichage précédent est atténué.
+function setBusy(message) {
+  $("busy").hidden = !message;
+  $("busy-text").textContent = message || "";
+  $("results").setAttribute("aria-busy", String(Boolean(message)));
+}
+
 async function run() {
   const button = $("run");
   button.disabled = true;
   button.textContent = "Standardisation…";
+  setBusy("Standardisation en cours…");
   try {
     const result = await api().run(state.input, state.output, enabledRules(), $("annotate").checked);
     if (!result.success) {
@@ -226,6 +243,7 @@ async function run() {
     state.filter = result.report.counts.flagged + result.report.counts.placeholder > 0 ? "review" : "all";
     renderReport();
   } finally {
+    setBusy(null);
     button.textContent = "Standardiser";
     updateRunButton();
   }
@@ -396,6 +414,7 @@ async function evaluate() {
   const button = $("evaluate");
   button.disabled = true;
   button.textContent = "Évaluation…";
+  setBusy("Évaluation en cours…");
   try {
     const result = await api().evaluate(state.input, enabledRules());
     if (!result.success) {
@@ -406,6 +425,7 @@ async function evaluate() {
     state.lastEvaluation = result.evaluation;
     renderEvaluation(result.evaluation);
   } finally {
+    setBusy(null);
     button.textContent = "Évaluer sans modifier";
     updateRunButton();
   }
@@ -551,7 +571,6 @@ function collectSettings() {
     convert_decimal_comma: $("convert-decimal-comma").checked,
     hrms_ppm_tolerance: Number($("hrms-ppm").value),
     hrms_abs_tolerance: Number($("hrms-abs").value),
-    hrms_abs_tolerance: Number($("hrms-abs").value),
     evaluation_thresholds: Object.fromEntries(THRESHOLD_KEYS.map((k) => [k, Number($(`th-${k}`).value)])),
   };
 }
@@ -563,8 +582,29 @@ function onUnitChange() {
   if (/^\[\?\?\? (K|°C)\]$/.test(field.value)) field.value = `[??? ${unit}]`;
 }
 
+// Seuils de notes : 4 nombres entre 0 et 100, décroissants (Parfait >= … >= Correct).
+// Le backend remet TOUS les seuils par défaut si l'un est invalide : on le dit
+// avant d'enregistrer plutôt que de perdre la saisie sans avertir.
+const THRESHOLD_NAMES = { parfait: "Parfait", tres_bon: "Très bon", bon: "Bon", correct: "Correct" };
+function thresholdProblem(thresholds) {
+  const values = THRESHOLD_KEYS.map((k) => thresholds[k]);
+  const bad = THRESHOLD_KEYS.find((k) => !Number.isFinite(thresholds[k]) || thresholds[k] < 0 || thresholds[k] > 100);
+  if (bad) return `Le seuil « ${THRESHOLD_NAMES[bad]} » doit être un nombre entre 0 et 100.`;
+  for (let i = 0; i < values.length - 1; i++) {
+    if (values[i] < values[i + 1]) {
+      return `Le seuil « ${THRESHOLD_NAMES[THRESHOLD_KEYS[i]]} » doit être supérieur ou égal à « ${THRESHOLD_NAMES[THRESHOLD_KEYS[i + 1]]} ».`;
+    }
+  }
+  return "";
+}
+
 async function saveSettings() {
-  state.settings = await api().save_settings(collectSettings());
+  const data = collectSettings();
+  const problem = thresholdProblem(data.evaluation_thresholds);
+  $("settings-error").textContent = problem;
+  $("settings-error").hidden = !problem;
+  if (problem) return;
+  state.settings = await api().save_settings(data);
   $("settings").close();
   if (state.lastReport) renderEntries();
 }
@@ -629,6 +669,7 @@ function wire() {
   document.addEventListener("keydown", onKey);
 
   $("open-settings").addEventListener("click", () => {
+    $("settings-error").hidden = true;
     fillSettings(state.settings);
     $("settings").showModal();
   });
